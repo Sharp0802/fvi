@@ -3,6 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    llvm-mingw-overlay.url = "github:Sharp0802/llvm-mingw-overlay";
   };
 
   outputs =
@@ -10,37 +11,36 @@
       nixpkgs,
       flake-utils,
       rust-overlay,
+      llvm-mingw-overlay,
       ...
     }:
     flake-utils.lib.eachSystem [ "aarch64-linux" "x86_64-linux" ] (
       system:
       let
         overlays = [
-          (import rust-overlay)
-          (import ./llvm-mingw.nix)
+          rust-overlay.overlays.default
+          llvm-mingw-overlay.overlays.default
         ];
         pkgs = import nixpkgs { inherit system overlays; };
 
-        packages = with pkgs; [
-          llvm-mingw
-          (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
-        ];
-
         buildInputs = with pkgs; [
-          # macroquad
           pkg-config
           fontconfig
+          wayland
+          vulkan-loader
+          vulkan-tools
           libxkbcommon
-          libGL
-          libXcursor
-          libXrandr
-          libXi
-          libX11
         ];
       in
       {
         devShells.default = pkgs.mkShell {
-          inherit packages buildInputs;
+          inherit buildInputs;
+
+          packages = with pkgs; [
+            llvm-mingw.latest.ucrt
+            (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+          ];
+
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";
         };
       }
