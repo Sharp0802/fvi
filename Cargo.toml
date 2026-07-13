@@ -4,11 +4,22 @@ resolver = "3"
 
 [workspace.dependencies]
 fvi-core = { path = "crates/core" }
-fvi-io = { path = "crates/io" }
-fvi = { path = "crates/main" }
+fvi-main = { path = "crates/main" }
 
-macroquad = "0.4"
-mmap-io = "1.0"
+# logging
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = "0.3"
+
+# graphics
+kurbo = "0.13"
+pollster = "0.4"
+vello = "0.9"
+winit = "0.30"
+wgpu = "30.0"
+wgpu-profiler = "0.27"
+
+# testing
 proptest = "1"
 
 [workspace.lints.rust]
@@ -23,4 +34,3 @@ allow_attributes_without_reason = "warn"
 filetype_is_file = "warn"
 unreachable = "warn"
 unwrap_used = "warn"
-module_inception = "allow"
