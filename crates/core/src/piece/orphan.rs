@@ -7,7 +7,6 @@ use crate::piece::{Pieces, ptr::Ptr};
 /// in [`Pieces`] automatically.
 #[must_use]
 #[derive(Debug)]
-#[repr(C)]
 pub struct Orphan {
     salt: u16,
     slot: Ptr,

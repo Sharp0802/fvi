@@ -5,7 +5,6 @@ use crate::piece::Node;
 use crate::piece::ptr::Ptr;
 
 #[derive(Debug, Clone, Copy)]
-#[repr(C)]
 struct Slot {
     free: u16,
     next: u16,

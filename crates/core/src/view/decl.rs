@@ -6,7 +6,6 @@ use crate::view::ViewSize;
 
 /// A logical view struct pointing a page of buffer.
 #[derive(Clone, Copy)]
-#[repr(C)]
 pub struct View {
     grp: NonZero<u16>,
     off: u16,

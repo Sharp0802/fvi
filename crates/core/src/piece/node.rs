@@ -4,7 +4,6 @@ use crate::piece::Ptr;
 use crate::view::{View, ViewSize};
 
 #[derive(Debug, Clone, Copy)]
-#[repr(C)]
 pub struct Node {
     pub size: ViewSize,
     pub prv: Ptr,
