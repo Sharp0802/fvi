@@ -4,6 +4,7 @@ mod node;
 mod orphan;
 mod ptr;
 mod slab;
+mod state;
 mod treap;
 
 use node::Node;

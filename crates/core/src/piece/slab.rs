@@ -7,22 +7,18 @@ use crate::piece::ptr::Ptr;
 #[derive(Debug, Clone, Copy)]
 struct Slot {
     free: u16,
-    next: u16,
-    prev: u16,
     node: Option<Node>,
 }
 
 const _: () = const {
     assert!(size_of::<Slot>() == 20);
-    assert!(align_of::<Slot>() == 2);
+    assert!(align_of::<Slot>() == 4);
 };
 
 impl Slot {
     const fn uninit() -> Self {
         Self {
             free: 0,
-            next: u16::MAX,
-            prev: u16::MAX,
             node: None,
         }
     }
@@ -31,8 +27,6 @@ impl Slot {
 #[derive(Debug, Clone)]
 pub struct Slab {
     free: u16,
-    start: u16,
-    end: u16,
     len: u16,
     buf: Box<[Slot]>,
 }
@@ -49,8 +43,6 @@ impl Slab {
 
         Self {
             free: 0,
-            start: u16::MAX,
-            end: u16::MAX,
             len: 0,
             buf,
         }
@@ -76,15 +68,6 @@ impl Slab {
         debug_assert!(old.is_none(), "free points non-free slot");
 
         self.free = slot.free;
-
-        if self.start == u16::MAX {
-            self.start = curr;
-            self.end = curr;
-        } else {
-            self.buf[self.start as usize].next = curr;
-            self.buf[curr as usize].prev = self.start;
-        }
-
         self.len += 1;
 
         Ptr::new(curr)
@@ -103,21 +86,6 @@ impl Slab {
 
         let ret = self.buf[pos as usize].node.take();
         if ret.is_some() {
-            let next = self.buf[pos as usize].next;
-            let prev = self.buf[pos as usize].prev;
-
-            if prev == u16::MAX {
-                self.start = next;
-            } else {
-                self.buf[prev as usize].next = next;
-            }
-
-            if next == u16::MAX {
-                self.end = prev;
-            } else {
-                self.buf[next as usize].prev = prev;
-            }
-
             self.buf[pos as usize].free = core::mem::replace(&mut self.free, pos);
             self.len -= 1;
         }
@@ -149,7 +117,6 @@ mod tests {
     use super::*;
     use crate::piece::Ptr;
     use crate::view::{View, ViewSize};
-    use core::num::NonZero;
     use proptest::collection::vec;
     use proptest::prelude::*;
 
@@ -176,7 +143,7 @@ mod tests {
             lhs: Ptr::new(seed),
             rhs: Ptr::new(seed),
             #[expect(clippy::unwrap_used, reason = "cannot be failed")]
-            desc: View::new(const { NonZero::new(1).unwrap() }, 0, 0, ViewSize::MAX).unwrap(),
+            desc: View::new(true, 0, 0, ViewSize::MAX).unwrap(),
         }
     }
 

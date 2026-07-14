@@ -7,14 +7,10 @@ use crate::view::ViewSize;
 /// A logical view struct pointing a page of buffer.
 #[derive(Clone, Copy)]
 pub struct View {
-    grp: NonZero<u16>,
+    grp: NonZero<u32>,
     off: u16,
     size: ViewSize,
 }
-
-const _: () = const {
-    assert!(size_of::<View>() == size_of::<Option<View>>());
-};
 
 impl View {
     /// Creates a new [`View`].
@@ -22,33 +18,32 @@ impl View {
     /// Returns `None` if any of the following conditions are met:
     ///
     /// - `size + off` logically exceeds 64KiB.
-    /// - `buf` is greater than `0x07`.
-    /// - `ver` is greater than `0x1FFF`.
+    /// - `ver` is greater than `0x3FFF_FFFF`.
     #[inline]
     #[must_use]
-    pub fn new(buf: NonZero<u8>, ver: u16, off: u16, size: ViewSize) -> Option<Self> {
-        if buf.get() > 0x07 || ver > 0x1FFF || size.checked_add(off).is_none() {
+    pub fn new(original: bool, ver: u32, off: u16, size: ViewSize) -> Option<Self> {
+        if ver > 0x3FFF_FFFF || size.checked_add(off).is_none() {
             None
         } else {
-            let grp =
-                NonZero::new(u16::from(buf.get()) << 13 | ver).unwrap_or_else(|| unreachable());
+            let grp = (1 << 31) | (u32::from(original) << 30) | ver;
+            let grp = NonZero::new(grp).unwrap_or_else(|| unreachable());
             Some(Self { grp, off, size })
         }
     }
 
-    /// Returns corresponding buffer index.
+    /// Returns whether the `self` points original buffer.
     #[inline]
     #[must_use]
-    pub const fn buf(&self) -> u8 {
-        (self.grp.get() >> 13) as u8
+    pub const fn is_original(&self) -> bool {
+        (self.grp.get() >> 30) & 1 == 1
     }
 
     /// Returns the version of view,
     /// corresponding to undo buffer index.
     #[inline]
     #[must_use]
-    pub const fn ver(&self) -> u16 {
-        self.grp.get() & 0x1FFF
+    pub const fn ver(&self) -> u32 {
+        self.grp.get() & 0x3FFF_FFFF
     }
 
     /// Returns starting offset on the page.
@@ -142,7 +137,7 @@ impl View {
 impl Debug for View {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("View")
-            .field("buf", &self.buf())
+            .field("is_original", &self.is_original())
             .field("ver", &self.ver())
             .field("off", &self.off)
             .field("size", &self.size)

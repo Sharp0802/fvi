@@ -508,8 +508,8 @@ mod tests {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct Key {
-        buf: u8,
-        ver: u16,
+        buf: bool,
+        ver: u32,
         off: u16,
         size: u32,
     }
@@ -523,7 +523,6 @@ mod tests {
     impl Key {
         #[must_use]
         fn to_view(self) -> View {
-            let buf = NonZero::new(self.buf).expect("nonzero buffer index expected");
             #[expect(
                 clippy::cast_possible_truncation,
                 reason = "generated test sizes are smaller than u16::MAX"
@@ -531,14 +530,14 @@ mod tests {
             let size = NonZero::new(self.size as u16)
                 .map(ViewSize::from)
                 .expect("nonzero size expected");
-            View::new(buf, self.ver, self.off, size).expect("size overflows")
+            View::new(self.buf, self.ver, self.off, size).expect("size overflows")
         }
     }
 
     impl From<View> for Key {
         fn from(value: View) -> Self {
             Self {
-                buf: value.buf(),
+                buf: value.is_original(),
                 ver: value.ver(),
                 off: value.off(),
                 size: value.size().get(),
@@ -547,8 +546,8 @@ mod tests {
     }
 
     fn arb_key() -> impl Strategy<Value = Key> {
-        (1u8..=7, 0u16..=0x1FFF, 1u32..=32).prop_map(|(buf, ver, size)| Key {
-            buf,
+        (0..=1, 0u32..=0x1FFF_FFFF, 1u32..=32).prop_map(|(buf, ver, size)| Key {
+            buf: buf == 1,
             ver,
             off: 0,
             size,

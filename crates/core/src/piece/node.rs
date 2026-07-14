@@ -13,5 +13,7 @@ pub struct Node {
 }
 
 const _: () = const {
-    assert!(size_of::<Node>() == size_of::<Option<Node>>());
+    let size = size_of::<Node>();
+    assert!(size == size_of::<Option<Node>>());
+    assert!(size == 16);
 };

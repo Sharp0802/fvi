@@ -1,7 +1,7 @@
 //! A benchmark for treap implementation.
 
 use std::hint::black_box;
-use std::num::{NonZeroU8, NonZeroU16};
+use std::num::NonZeroU16;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
@@ -16,14 +16,8 @@ fn view_size(size: u16) -> ViewSize {
     ViewSize::from(NonZeroU16::new(size).expect("nonzero view size"))
 }
 
-fn view(buf: u8, ver: u16, off: u16, size: u16) -> View {
-    View::new(
-        NonZeroU8::new(buf).expect("nonzero buffer"),
-        ver,
-        off,
-        view_size(size),
-    )
-    .expect("valid view")
+fn view(buf: bool, ver: u32, off: u16, size: u16) -> View {
+    View::new(buf, ver, off, view_size(size)).expect("valid view")
 }
 
 /// Builds exactly `pieces` nodes.
@@ -43,7 +37,12 @@ fn fragmented(pieces: usize, salt: u16) -> Pieces {
         tree.insert(
             insert_off,
             #[expect(clippy::unwrap_used, reason = "should not be failed")]
-            view(1, u16::try_from(index % 2).unwrap(), source_off, PIECE_SIZE),
+            view(
+                true,
+                u32::try_from(index % 2).unwrap(),
+                source_off,
+                PIECE_SIZE,
+            ),
         );
     }
 
@@ -87,7 +86,7 @@ fn bench_insert_middle(c: &mut Criterion) {
                         #[expect(clippy::unwrap_used, reason = "should not be failed")]
                         let insert_off = u16::try_from(tree.len() / 2 + 3).unwrap();
 
-                        tree.insert(black_box(insert_off), black_box(view(7, 0x1FFE, 0, 3)));
+                        tree.insert(black_box(insert_off), black_box(view(false, 0x1FFE, 0, 3)));
 
                         black_box(tree.len());
                     },
@@ -136,12 +135,12 @@ fn boundary_case(coalescing: bool) -> Pieces {
     let mut tree = Pieces::new(SALT);
 
     // [buf=1, ver=0, off=0, size=1]
-    tree.insert(0, view(1, 0, 0, 1));
+    tree.insert(0, view(true, 0, 0, 1));
 
     // This starts at source offset 11, so it does not initially
     // coalesce with the first piece.
-    let right_ver = u16::from(!coalescing);
-    tree.insert(1, view(1, right_ver, 11, 2));
+    let right_ver = u32::from(!coalescing);
+    tree.insert(1, view(true, right_ver, 11, 2));
 
     tree
 }
@@ -157,7 +156,7 @@ fn bench_boundary_concat(c: &mut Criterion) {
                 // [0,1], [0,11], [11,2]
                 //
                 // The last two views are coalescible into [0,13].
-                tree.insert(1, black_box(view(1, 0, 0, 11)));
+                tree.insert(1, black_box(view(true, 0, 0, 11)));
 
                 black_box(tree.len());
                 black_box(tree.iter().count());
@@ -170,7 +169,7 @@ fn bench_boundary_concat(c: &mut Criterion) {
         b.iter_batched_ref(
             || boundary_case(false),
             |tree| {
-                tree.insert(1, black_box(view(1, 0, 0, 11)));
+                tree.insert(1, black_box(view(true, 0, 0, 11)));
 
                 black_box(tree.len());
                 black_box(tree.iter().count());
