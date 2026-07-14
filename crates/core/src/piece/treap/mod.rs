@@ -10,7 +10,7 @@ use monad::Key;
 mod iter;
 mod monad;
 
-const MAX: usize = 1024;
+const MAX: u16 = 1024;
 
 /// A piece table based on implicit treap,
 /// able to hold up to 1024 pieces.
@@ -18,7 +18,7 @@ const MAX: usize = 1024;
 pub struct Pieces {
     root: Ptr,
     salt: u16,
-    slab: Slab<MAX>,
+    slab: Slab,
 }
 
 impl Pieces {
@@ -50,7 +50,7 @@ impl Pieces {
         Self {
             root: Ptr::NIL,
             salt,
-            slab: Slab::new(),
+            slab: Slab::new(MAX),
         }
     }
 
@@ -113,7 +113,7 @@ impl Pieces {
             return false;
         };
 
-        total <= ViewSize::MAX.get() && self.slab.len() as usize <= MAX - 4
+        total <= ViewSize::MAX.get() && self.slab.len() <= MAX - 4
     }
 
     /// Returns whether the given orphan can be inserted into `self`.
@@ -140,7 +140,7 @@ impl Pieces {
     #[inline]
     #[must_use]
     pub const fn can_remove(&self) -> bool {
-        self.slab.len() as usize <= MAX - 2
+        self.slab.len() <= MAX - 2
     }
 
     /// Inserts a piece desc at given byte offset.

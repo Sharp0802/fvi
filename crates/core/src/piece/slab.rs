@@ -30,7 +30,7 @@ impl Slot {
 }
 
 #[derive(Debug, Clone)]
-pub struct Slab<const N: usize> {
+pub struct Slab {
     free: u16,
     start: u16,
     end: u16,
@@ -38,12 +38,10 @@ pub struct Slab<const N: usize> {
     buf: Box<[Slot]>,
 }
 
-impl<const N: usize> Slab<N> {
+impl Slab {
     #[must_use]
-    pub fn new() -> Self {
-        assert!(u16::try_from(N.saturating_add(1)).is_ok());
-
-        let mut buf = vec![const { Slot::uninit() }; N].into_boxed_slice();
+    pub fn new(n: u16) -> Self {
+        let mut buf = vec![const { Slot::uninit() }; n as usize].into_boxed_slice();
 
         for (i, slot) in buf.iter_mut().enumerate() {
             #[expect(clippy::cast_possible_truncation, reason = "N < u16::MAX")]
@@ -100,7 +98,7 @@ impl<const N: usize> Slab<N> {
             return None;
         };
 
-        if self.len == 0 || (pos as usize) >= N {
+        if self.len == 0 || (pos as usize) >= self.buf.len() {
             return None;
         }
 
@@ -195,7 +193,7 @@ mod tests {
             ops
         })) {
             let mut mock = [const { None }; N];
-            let mut actual = Slab::<N>::new();
+            let mut actual = Slab::new(N16);
             let mut len = 0;
 
             for op in ops {
