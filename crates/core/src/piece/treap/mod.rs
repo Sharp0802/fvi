@@ -15,7 +15,6 @@ const MAX: usize = 1024;
 /// A piece table based on implicit treap,
 /// able to hold up to 1024 pieces.
 #[derive(Debug)]
-#[repr(C)]
 pub struct Pieces {
     root: Ptr,
     salt: u16,
@@ -47,7 +46,7 @@ impl Pieces {
     /// Although it's not checked in this function.
     #[inline]
     #[must_use]
-    pub const fn new(salt: u16) -> Self {
+    pub fn new(salt: u16) -> Self {
         Self {
             root: Ptr::NIL,
             salt,

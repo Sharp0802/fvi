@@ -1,50 +1,59 @@
-use crate::piece::{Node, ptr::Ptr};
+use alloc::boxed::Box;
+use alloc::vec;
+
+use crate::piece::Node;
+use crate::piece::ptr::Ptr;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 struct Slot {
+    free: u16,
     next: u16,
+    prev: u16,
     node: Option<Node>,
 }
 
 const _: () = const {
-    assert!(size_of::<Slot>() == 16);
+    assert!(size_of::<Slot>() == 20);
     assert!(align_of::<Slot>() == 2);
 };
 
 impl Slot {
     const fn uninit() -> Self {
         Self {
-            next: 0,
+            free: 0,
+            next: u16::MAX,
+            prev: u16::MAX,
             node: None,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-#[repr(C)]
 pub struct Slab<const N: usize> {
     free: u16,
+    start: u16,
+    end: u16,
     len: u16,
-    buf: [Slot; N],
+    buf: Box<[Slot]>,
 }
 
 impl<const N: usize> Slab<N> {
-    #[inline]
     #[must_use]
-    pub const fn new() -> Self {
-        assert!(N <= u16::MAX as usize);
+    pub fn new() -> Self {
+        assert!(u16::try_from(N.saturating_add(1)).is_ok());
 
-        let mut buf = [const { Slot::uninit() }; N];
+        let mut buf = vec![const { Slot::uninit() }; N].into_boxed_slice();
 
-        let mut i = 0u16;
-        while (i as usize) < N {
-            buf[i as usize].next = i + 1;
-            i += 1;
+        for (i, slot) in buf.iter_mut().enumerate() {
+            #[expect(clippy::cast_possible_truncation, reason = "N < u16::MAX")]
+            (slot.free = (i + 1) as u16);
         }
 
         Self {
             free: 0,
+            start: u16::MAX,
+            end: u16::MAX,
             len: 0,
             buf,
         }
@@ -69,7 +78,16 @@ impl<const N: usize> Slab<N> {
         let old = slot.node.replace(node);
         debug_assert!(old.is_none(), "free points non-free slot");
 
-        self.free = slot.next;
+        self.free = slot.free;
+
+        if self.start == u16::MAX {
+            self.start = curr;
+            self.end = curr;
+        } else {
+            self.buf[self.start as usize].next = curr;
+            self.buf[curr as usize].prev = self.start;
+        }
+
         self.len += 1;
 
         Ptr::new(curr)
@@ -88,7 +106,22 @@ impl<const N: usize> Slab<N> {
 
         let ret = self.buf[pos as usize].node.take();
         if ret.is_some() {
-            self.buf[pos as usize].next = core::mem::replace(&mut self.free, pos);
+            let next = self.buf[pos as usize].next;
+            let prev = self.buf[pos as usize].prev;
+
+            if prev == u16::MAX {
+                self.start = next;
+            } else {
+                self.buf[prev as usize].next = next;
+            }
+
+            if next == u16::MAX {
+                self.end = prev;
+            } else {
+                self.buf[next as usize].prev = prev;
+            }
+
+            self.buf[pos as usize].free = core::mem::replace(&mut self.free, pos);
             self.len -= 1;
         }
 
