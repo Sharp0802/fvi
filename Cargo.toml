@@ -27,13 +27,14 @@ wgpu = "30.0"
 wgpu-profiler = "0.27"
 
 # testing
+criterion = "0.8"
 proptest = "1"
 
 # macros
 pastey = "0.2"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 missing_docs = "warn"
 
 [workspace.lints.clippy]
