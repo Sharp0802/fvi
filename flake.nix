@@ -37,6 +37,7 @@
           inherit buildInputs;
 
           packages = with pkgs; [
+            cargo-deny
             llvm-mingw.latest.ucrt
             (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
           ];
