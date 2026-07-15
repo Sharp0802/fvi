@@ -27,6 +27,13 @@ impl<T> Slab<T> {
         }
     }
 
+    /// Returns the total number of slots that
+    /// this [`Slab<T>`] can hold without reallocating.
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.slots.capacity()
+    }
+
     /// Returns the length of this [`Slab<T>`].
     #[must_use]
     pub const fn len(&self) -> usize {

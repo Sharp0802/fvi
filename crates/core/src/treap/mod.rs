@@ -34,6 +34,22 @@ impl Treap {
         }
     }
 
+    /// Returns the total number of slots that
+    /// this [`Treap`] can hold without reallocating.
+    #[inline]
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.slab.capacity()
+    }
+
+    /// Returns the total number of nodes,
+    /// including deleted ones.
+    #[inline]
+    #[must_use]
+    pub const fn capacity_used(&self) -> usize {
+        self.slab.len()
+    }
+
     /// Returns true if total byte length is zero;
     /// Otherwise, returns false.
     #[inline]
