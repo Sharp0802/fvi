@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use crate::collections::Slab;
 use crate::collections::treap::node::Node;
-use crate::collections::treap::{Iter, NIL};
+use crate::collections::treap::{Iter, IterAll, NIL};
 use crate::math::xorshift;
 use crate::piece::{Piece, PieceDesc};
 
@@ -62,6 +62,13 @@ impl Treap {
     #[must_use]
     pub const fn iter(&self, version: u32) -> Iter<'_> {
         Iter::new(self, self.root, version)
+    }
+
+    /// Returns in-order traversal iterator, including removed nodes.
+    #[inline]
+    #[must_use]
+    pub const fn all(&self) -> IterAll<'_> {
+        IterAll::new(self, self.root)
     }
 
     /// Inserts a piece desc at given byte offset.
