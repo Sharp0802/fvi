@@ -4,9 +4,9 @@
 extern crate alloc as std;
 
 pub mod alloc;
+pub mod math;
 pub mod piece;
-pub mod sorted;
-pub mod view;
+pub mod treap;
 
 #[inline]
 #[track_caller]

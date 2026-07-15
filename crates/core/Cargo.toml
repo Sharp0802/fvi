@@ -6,10 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [[bench]]
-name = "treap"
-harness = false
-
-[[bench]]
 name = "slab"
 harness = false
 
