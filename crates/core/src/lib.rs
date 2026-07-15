@@ -1,8 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-extern crate alloc;
-
+pub mod alloc;
 pub mod piece;
 pub mod sorted;
 pub mod view;

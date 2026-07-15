@@ -1,7 +1,6 @@
 //! A module providing sorted collections.
 
-use alloc::vec::Vec;
-
+use crate::alloc::std::vec::Vec;
 use crate::view::ViewSize;
 
 #[must_use]
@@ -27,6 +26,7 @@ const fn find(vec: &[u16], val: u16) -> usize {
 }
 
 /// A sorted vector storage.
+#[derive(Debug)]
 pub struct SortedVec {
     vec: Vec<u16>,
 }
@@ -37,7 +37,7 @@ impl SortedVec {
     #[must_use]
     pub fn with_capacity(capacity: ViewSize) -> Self {
         Self {
-            vec: Vec::with_capacity(capacity.get() as usize)
+            vec: Vec::with_capacity(capacity.get() as usize),
         }
     }
 

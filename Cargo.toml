@@ -9,8 +9,8 @@ rust-version = "1.87.0"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+fvi = { path = "crates/main" }
 fvi-core = { path = "crates/core" }
-fvi-main = { path = "crates/main" }
 fvi-ui = { path = "crates/ui" }
 
 # logging
@@ -32,6 +32,7 @@ proptest = "1"
 
 # macros
 pastey = "0.2"
+thiserror = "2.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

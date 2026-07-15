@@ -6,7 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+fvi-core.workspace = true
 pastey.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
