@@ -6,5 +6,5 @@ mod node;
 
 const NIL: usize = usize::MAX;
 
-pub use iter::{Item, Iter};
+pub use iter::Iter;
 pub use main::Treap;

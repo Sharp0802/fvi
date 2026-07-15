@@ -23,13 +23,13 @@ pub struct PieceDesc {
 impl PieceDesc {
     /// Builds a [`Piece`] from this [`PieceDesc`] using specified states.
     #[must_use]
-    pub const fn build(self, deleted: bool, version: u32) -> Piece {
+    pub const fn build(self, add_version: u32) -> Piece {
         Piece {
             buffer: self.buffer,
             start: self.start,
             end: self.end,
-            deleted,
-            version,
+            add_version,
+            del_version: u32::MAX,
         }
     }
 
@@ -55,10 +55,10 @@ pub struct Piece {
     pub start: u64,
     /// An exclusive ending offset on buffer, in bytes.
     pub end: u64,
-    /// Whether the this [`Piece`] is in deleted state.
-    pub deleted: bool,
-    /// An editing version counter.
-    pub version: u32,
+    /// An editing version counter for insertion.
+    pub add_version: u32,
+    /// An editing version counter for removal.
+    pub del_version: u32,
 }
 
 impl Piece {
@@ -82,7 +82,11 @@ impl Piece {
         "#
     )]
     pub const fn len(&self) -> u64 {
-        if self.deleted { 0 } else { self.desc().len() }
+        if self.del_version == u32::MAX {
+            self.desc().len()
+        } else {
+            0
+        }
     }
 
     /// Splits [`Piece`] at given relative offset.
@@ -110,8 +114,8 @@ impl Piece {
     pub fn precede(&self, other: &Self) -> bool {
         let tmp = self.end == other.start;
         tmp && self.buffer == other.buffer
-            && self.deleted == other.deleted
-            && self.version == other.version
+            && self.add_version == other.add_version
+            && self.del_version == other.del_version
     }
 
     /// Coarsen given two [`Piece`],

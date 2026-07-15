@@ -1,15 +1,13 @@
-//! A low-level piece table implemented with an implicit treap.
-
 use core::cmp::Ordering;
 
 use crate::collections::Slab;
 use crate::collections::treap::node::Node;
 use crate::collections::treap::{Iter, NIL};
 use crate::math::xorshift;
-use crate::piece::Piece;
+use crate::piece::{Piece, PieceDesc};
 
 /// A low-level piece table implemented with an implicit treap.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Treap {
     root: usize,
     salt: usize,
@@ -59,48 +57,78 @@ impl Treap {
         self.len_of(self.root)
     }
 
-    /// Returns in-order traversal iterator.
+    /// Returns in-order traversal iterator for specified version.
     #[inline]
     #[must_use]
-    pub const fn iter(&mut self) -> Iter<'_> {
-        Iter::new(self, self.root)
+    pub const fn iter(&self, version: u32) -> Iter<'_> {
+        Iter::new(self, self.root, version)
     }
 
     /// Inserts a piece desc at given byte offset.
     ///
     /// # Panics
     ///
-    /// Panics if given offset is not in this treap.
-    pub fn insert(&mut self, off: u64, piece: Piece) {
+    /// Panics if any of the following conditions are met:
+    ///
+    /// - Specified version is [`u32::MAX`].
+    /// - Given offset is not in this treap.
+    pub fn insert(&mut self, off: u64, desc: PieceDesc, version: u32) {
+        assert!(version != u32::MAX);
         assert!(off <= self.len());
 
         let (lhs, rhs) = self.split(self.root, off);
-        let mid = self.new_leaf(NIL, piece);
+        let mid = self.new_leaf(NIL, desc.build(version));
         let tmp = self.concat(lhs, mid);
         self.root = self.concat(tmp, rhs);
     }
 
-    /// Removes a range from the treap.
-    pub fn remove(&mut self, start: u64, end: u64, version: u32) {
+    /// Removes a range from the treap, returning index of removed node.
+    ///
+    /// # Panics
+    ///
+    /// Panics if specified version is [`u32::MAX`].
+    pub fn remove(&mut self, start: u64, end: u64, version: u32) -> Option<usize> {
+        assert!(version != u32::MAX);
+
         match end.cmp(&self.len()) {
-            Ordering::Greater => {}
+            Ordering::Greater => None,
             Ordering::Equal => {
                 let (rst, rhs) = self.split(self.root, start);
-                self.slab[rhs].val.deleted = true;
-                self.slab[rhs].val.version = version;
-
+                self.slab[rhs].val.del_version = version;
                 self.root = self.merge(rst, rhs);
+                Some(rhs)
             }
             Ordering::Less => {
                 let (rst, rhs) = self.split(self.root, end);
                 let (lhs, mid) = self.split(rst, start);
-                self.slab[mid].val.deleted = true;
-                self.slab[mid].val.version = version;
+                self.slab[mid].val.del_version = version;
 
                 let root = self.merge(lhs, mid);
                 let root = self.merge(root, rhs);
                 self.root = root;
+
+                Some(mid)
             }
+        }
+    }
+
+    /// Prunes nodes that is invalid in given version range.
+    pub fn prune(&mut self, min: u32, max: u32) {
+        let mut cur = self.root;
+        while cur != NIL {
+            let next = self.next(cur);
+
+            let node = self.slab[cur];
+            if node.val.del_version < min || max < node.val.add_version {
+                self.kill(cur);
+            } else if max < node.val.del_version {
+                self.slab[cur].val.del_version = u32::MAX;
+                self.propagate(cur);
+            } else if node.val.add_version < min {
+                self.slab[cur].val.add_version = min;
+            }
+
+            cur = next;
         }
     }
 }
@@ -118,11 +146,15 @@ impl Treap {
 
     fn update(&mut self, at: usize) {
         let Some(v) = self.slab.get(at) else { return };
-        let len = self.len_of(v.lhs) + v.val.len() + self.len_of(v.rhs);
-        self.slab[at].len = len;
+        if v.val.del_version == u32::MAX {
+            let len = self.len_of(v.lhs) + v.val.len() + self.len_of(v.rhs);
+            self.slab[at].len = len;
+        } else {
+            self.slab[at].len = 0;
+        }
     }
 
-    fn propagate(&mut self, mut at: usize) {
+    pub(crate) fn propagate(&mut self, mut at: usize) {
         while let Some(v) = self.slab.get(at) {
             let prv = v.prv;
             self.update(at);
@@ -130,14 +162,7 @@ impl Treap {
         }
     }
 
-    #[must_use]
-    fn new_leaf(&mut self, prv: usize, value: Piece) -> usize {
-        let mut node: Node = value.into();
-        node.prv = prv;
-        self.slab.insert(node)
-    }
-
-    pub(super) fn kill(&mut self, t: usize) {
+    fn kill(&mut self, t: usize) {
         let Some(v) = self.slab.get(t) else { return };
 
         if let Some(pv) = self.slab.get_mut(v.prv) {
@@ -151,6 +176,13 @@ impl Treap {
         }
 
         self.kill_impl(t);
+    }
+
+    #[must_use]
+    fn new_leaf(&mut self, prv: usize, value: Piece) -> usize {
+        let mut node: Node = value.into();
+        node.prv = prv;
+        self.slab.insert(node)
     }
 
     fn kill_impl(&mut self, t: usize) {
