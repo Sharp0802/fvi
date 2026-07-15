@@ -1,17 +1,17 @@
-use crate::alloc::NIL;
 use crate::alloc::slot::Slot;
 use crate::alloc::std::vec::Vec;
 
-/// A slab container.
+/// A slab container, for stable keys.
 #[derive(Debug, Clone)]
 pub struct Slab<T> {
+    len: usize,
     free: usize,
     slots: Vec<Slot<T>>,
 }
 
 const _: () = const {
-    assert!(size_of::<Slab<u32>>() == 32);
-    assert!(size_of::<Slab<u64>>() == 32);
+    assert!(size_of::<Slab<u32>>() == 40);
+    assert!(size_of::<Slab<u64>>() == 40);
 };
 
 impl<T> Slab<T> {
@@ -19,7 +19,8 @@ impl<T> Slab<T> {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            free: NIL,
+            len: 0,
+            free: 0,
             slots: Vec::new(),
         }
     }
@@ -27,7 +28,7 @@ impl<T> Slab<T> {
     /// Returns the length of this [`Slab<T>`].
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.slots.len()
+        self.len
     }
 
     /// Returns the emptiness of this [`Slab<T>`].
@@ -39,39 +40,49 @@ impl<T> Slab<T> {
     /// Inserts given value into this [`Slab<T>`].
     #[must_use]
     pub fn insert(&mut self, value: T) -> usize {
-        if self.free == NIL {
-            let key = self.len();
-            let mut slot = Slot::new();
-            slot.write(value);
+        let key = self.free;
+
+        if self.free == self.slots.len() {
+            let slot = Slot::new(key + 1, value);
             self.slots.push(slot);
-            key
         } else {
-            let key = self.free;
-            self.free = self.slots[key].next();
             self.slots[key].write(value);
-            key
         }
+
+        self.free = self.slots[key].next();
+        self.len += 1;
+
+        key
     }
 
     /// Removes an item at specified key from this [`Slab<T>`].
     #[must_use]
     pub fn remove(&mut self, key: usize) -> Option<T> {
-        let val = self.slots[key].take()?;
+        let val = self.slots.get_mut(key)?.take()?;
         self.slots[key].link(self.free);
         self.free = key;
+        self.len -= 1;
         Some(val)
     }
 
     /// Returns a reference of the item at specified key.
     #[must_use]
     pub const fn get(&self, key: usize) -> Option<&T> {
-        self.slots.as_slice()[key].as_ref()
+        if key < self.slots.len() {
+            self.slots.as_slice()[key].as_ref()
+        } else {
+            None
+        }
     }
 
     /// Returns a mutable reference of the item at specified key.
     #[must_use]
     pub const fn get_mut(&mut self, key: usize) -> Option<&mut T> {
-        self.slots.as_mut_slice()[key].as_mut()
+        if key < self.slots.len() {
+            self.slots.as_mut_slice()[key].as_mut()
+        } else {
+            None
+        }
     }
 }
 
@@ -102,15 +113,19 @@ mod tests {
             Op::Insert(val) => {
                 let key = actual.insert(val);
                 if key < mock.len() {
-                    prop_assert!(mock[val].is_none());
-                    mock[val] = Some(val);
+                    prop_assert!(mock[key].is_none());
+                    mock[key] = Some(val);
                 } else {
                     prop_assert_eq!(key, mock.len());
                     mock.push(Some(val));
                 }
+
+                prop_assert_eq!(actual.get(key), mock[key].as_ref());
             }
             Op::Remove(at) => {
-                if !mock.is_empty() {
+                if mock.is_empty() {
+                    prop_assert!(actual.is_empty());
+                } else {
                     let at = at % mock.len();
                     prop_assert_eq!(actual.remove(at), mock[at].take());
                 }

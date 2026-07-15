@@ -1,41 +1,43 @@
 use core::fmt::Debug;
 use core::mem::MaybeUninit;
 
-use crate::alloc::NIL;
-
 pub struct Slot<T> {
     next: usize,
     value: MaybeUninit<T>,
 }
 
+const MASK: usize = 1 << (usize::BITS - 1);
+
 impl<T> Slot<T> {
     #[must_use]
-    pub const fn new() -> Self {
+    pub const fn new(next: usize, value: T) -> Self {
+        assert!(next & MASK == 0);
         Self {
-            next: 0,
-            value: MaybeUninit::uninit(),
+            next: MASK | next,
+            value: MaybeUninit::new(value),
         }
     }
 
     pub const fn next(&self) -> usize {
-        self.next
+        self.next & !MASK
     }
 
     pub const fn link(&mut self, value: usize) {
-        assert!(self.next != NIL);
+        assert!(value & MASK == 0, "bound exceeded");
+        assert!(self.next & MASK == 0, "already written");
         self.next = value;
     }
 
     pub const fn write(&mut self, value: T) {
-        assert!(self.next != NIL);
+        assert!(self.next & MASK == 0, "already written");
         self.value.write(value);
-        self.next = NIL;
+        self.next |= MASK;
     }
 
     #[must_use]
     pub const fn take(&mut self) -> Option<T> {
-        if self.next == NIL {
-            self.next = 0;
+        if self.next & MASK == MASK {
+            self.next &= !MASK;
             #[expect(unsafe_code, reason = "invariant")]
             Some(unsafe { self.value.assume_init_read() })
         } else {
@@ -45,7 +47,7 @@ impl<T> Slot<T> {
 
     #[must_use]
     pub const fn as_ref(&self) -> Option<&T> {
-        if self.next == NIL {
+        if self.next & MASK == MASK {
             #[expect(unsafe_code, reason = "invariant")]
             Some(unsafe { self.value.assume_init_ref() })
         } else {
@@ -55,7 +57,7 @@ impl<T> Slot<T> {
 
     #[must_use]
     pub const fn as_mut(&mut self) -> Option<&mut T> {
-        if self.next == NIL {
+        if self.next & MASK == MASK {
             #[expect(unsafe_code, reason = "invariant")]
             Some(unsafe { self.value.assume_init_mut() })
         } else {
@@ -73,7 +75,7 @@ impl<T> Drop for Slot<T> {
 impl<T: Debug> Debug for Slot<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Slot")
-            .field("free", &self.next)
+            .field("next", &(self.next & !MASK))
             .field("value", &self.as_ref())
             .finish()
     }
