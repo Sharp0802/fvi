@@ -74,3 +74,71 @@ impl<T> Slab<T> {
         self.slots.as_mut_slice()[key].as_mut()
     }
 }
+
+impl<T> Default for Slab<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest::test_runner::TestCaseResult;
+
+    #[derive(Debug, Clone, Copy)]
+    enum Op {
+        Insert(usize),
+        Remove(usize),
+    }
+
+    type Mock = Vec<Option<usize>>;
+    type Actual = Slab<usize>;
+
+    fn apply(op: Op, mock: &mut Mock, actual: &mut Actual) -> TestCaseResult {
+        match op {
+            Op::Insert(val) => {
+                let key = actual.insert(val);
+                if key < mock.len() {
+                    prop_assert!(mock[val].is_none());
+                    mock[val] = Some(val);
+                } else {
+                    prop_assert_eq!(key, mock.len());
+                    mock.push(Some(val));
+                }
+            }
+            Op::Remove(at) => {
+                if !mock.is_empty() {
+                    let at = at % mock.len();
+                    prop_assert_eq!(actual.remove(at), mock[at].take());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn arb_op(max_len: usize) -> impl Strategy<Value = Vec<Op>> {
+        vec(
+            prop_oneof![
+                any::<usize>().prop_map(Op::Insert),
+                any::<usize>().prop_map(Op::Remove)
+            ],
+            1..=max_len,
+        )
+    }
+
+    proptest! {
+        #[test]
+        fn match_models(ops in arb_op(256)) {
+            let mut mock = Mock::new();
+            let mut actual = Actual::new();
+
+            for op in ops {
+                apply(op, &mut mock, &mut actual)?;
+            }
+        }
+    }
+}
