@@ -1,5 +1,6 @@
+use std::vec::Vec;
+
 use crate::alloc::slot::Slot;
-use crate::alloc::std::vec::Vec;
 
 /// A slab container, for stable keys.
 #[derive(Debug, Clone)]

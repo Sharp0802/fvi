@@ -492,11 +492,11 @@ impl<'a> IntoIterator for &'a Pieces {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec::Vec;
     use core::num::NonZero;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::TestCaseResult;
+    use std::vec::Vec;
 
     #[derive(Debug, Clone, Copy)]
     enum Op {

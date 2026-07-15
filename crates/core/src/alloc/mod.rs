@@ -1,4 +1,4 @@
-pub(crate) extern crate alloc as std;
+//! A module for allocation features.
 
 mod slab;
 mod slot;

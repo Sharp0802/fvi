@@ -1,6 +1,7 @@
 //! A module providing sorted collections.
 
-use crate::alloc::std::vec::Vec;
+use std::vec::Vec;
+
 use crate::view::ViewSize;
 
 #[must_use]
