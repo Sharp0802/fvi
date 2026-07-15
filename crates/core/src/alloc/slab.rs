@@ -1,3 +1,4 @@
+use core::ops::{Index, IndexMut};
 use std::vec::Vec;
 
 use crate::alloc::slot::Slot;
@@ -84,6 +85,20 @@ impl<T> Slab<T> {
         } else {
             None
         }
+    }
+}
+
+impl<T> Index<usize> for Slab<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get(index).expect("index out of bounds")
+    }
+}
+
+impl<T> IndexMut<usize> for Slab<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        self.get_mut(index).expect("index out of bounds")
     }
 }
 
