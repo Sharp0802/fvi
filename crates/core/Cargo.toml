@@ -9,6 +9,10 @@ license.workspace = true
 name = "treap"
 harness = false
 
+[[bench]]
+name = "slab"
+harness = false
+
 [dev-dependencies]
 criterion.workspace = true
 proptest.workspace = true
