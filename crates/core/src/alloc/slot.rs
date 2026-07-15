@@ -81,11 +81,10 @@ impl<T: Debug> Debug for Slot<T> {
 
 impl<T: Clone> Clone for Slot<T> {
     fn clone(&self) -> Self {
-        let value = if let Some(value) = self.as_ref() {
-            MaybeUninit::new(value.clone())
-        } else {
-            MaybeUninit::uninit()
-        };
+        let value = self
+            .as_ref()
+            .cloned()
+            .map_or_else(MaybeUninit::uninit, MaybeUninit::new);
 
         Self {
             next: self.next,
