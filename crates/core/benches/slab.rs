@@ -6,7 +6,7 @@ use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, 
 use fvi_core::alloc::Slab;
 
 const SALT: u64 = 0xDEAD_BEEF;
-const SIZES: &[u64] = &[16, 64, 256, 768];
+const SIZES: &[u64] = &[16, 256, 768];
 
 const fn xorsft(seed: u64) -> u64 {
     let mut x = seed;
