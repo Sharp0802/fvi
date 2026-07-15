@@ -1,5 +1,3 @@
-use core::fmt::Debug;
-
 use crate::piece::Piece;
 
 #[derive(Debug, Clone, Copy)]
