@@ -71,7 +71,7 @@ impl Treap {
     /// Panics if any of the following conditions are met:
     ///
     /// - Specified version is [`u32::MAX`].
-    /// - Given offset is not in this treap.
+    /// - Given offset is not in this [`Treap`].
     pub fn insert(&mut self, off: u64, desc: PieceDesc, version: u32) {
         assert!(version != u32::MAX);
         assert!(off <= self.len());
@@ -109,6 +109,30 @@ impl Treap {
 
                 Some(mid)
             }
+        }
+    }
+
+    /// Splits this [`Treap`] at given byte offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if given offset is not in this [`Treap`].
+    #[must_use]
+    pub fn split_off(&mut self, off: u64) -> Self {
+        assert!(off <= self.len());
+
+        if off == 0 {
+            core::mem::replace(self, Self::new(xorshift(self.salt)))
+        } else if off == self.len() {
+            Self::new(xorshift(self.salt))
+        } else {
+            let (lhs, rhs) = self.split(self.root, off);
+            let mut cloned = self.clone();
+            self.root = lhs;
+            self.kill(rhs);
+            cloned.root = rhs;
+            cloned.kill(lhs);
+            cloned
         }
     }
 
