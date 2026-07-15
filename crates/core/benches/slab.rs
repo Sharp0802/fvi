@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use fvi_core::alloc::Slab;
+use fvi_core::collections::Slab;
 
 const SALT: u64 = 0xDEAD_BEEF;
 const SIZES: &[u64] = &[16, 256, 768];
