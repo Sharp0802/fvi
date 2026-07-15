@@ -40,10 +40,40 @@ impl Table {
         self.treap.remove(start, end, cx.version);
     }
 
+    /// Splits this [`Table`] at given byte offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if given offset is not in this [`Table`].
+    #[must_use]
+    pub fn split_off(&mut self, off: u64) -> Self {
+        let treap = self.treap.split_off(off);
+
+        // NOTE: Don't have to eagarly calculate bounds.
+        //       Since bounds only affect behaviour
+        //       if total bounds are changed,
+        //       Just spliting doesn't affect actual behaviour.
+        Self {
+            min_version: self.min_version,
+            max_version: self.max_version,
+            treap,
+        }
+    }
+
     /// Returns iterator of piece desc for given context.
     #[must_use]
     pub const fn iter<'a>(&'a self, cx: &Context) -> Iter<'a> {
         self.treap.iter(cx.version)
+    }
+
+    /// Returns bounds of piece version.
+    ///
+    /// Bounds are best-effort,
+    /// and only guarentee at least version of a piece
+    /// in this [`Table`] is in returned bounds.
+    #[must_use]
+    pub const fn version_bounds(&self) -> (u32, u32) {
+        (self.min_version, self.max_version)
     }
 }
 
