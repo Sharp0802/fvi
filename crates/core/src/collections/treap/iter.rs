@@ -2,8 +2,8 @@ use core::marker::PhantomData;
 use core::ptr::NonNull;
 use core::{iter::FusedIterator, ops::Deref};
 
+use crate::collections::treap::{NIL, Treap};
 use crate::piece::Piece;
-use crate::treap::{NIL, Treap};
 
 /// An in-order iterator over pieces in [`Treap`].
 pub struct Iter<'a> {

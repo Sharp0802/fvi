@@ -1,11 +1,11 @@
-//! A module providing implicit treap implementation for texts.
+//! A low-level piece table implemented with an implicit treap.
 
 use core::cmp::Ordering;
 
-use crate::alloc::Slab;
+use crate::collections::Slab;
+use crate::collections::treap::node::Node;
 use crate::math::xorshift;
 use crate::piece::Piece;
-use crate::treap::node::Node;
 
 pub use iter::{Item, Iter};
 
@@ -14,7 +14,7 @@ mod node;
 
 const NIL: usize = usize::MAX;
 
-/// A piece table based on implicit treap.
+/// A low-level piece table implemented with an implicit treap.
 #[derive(Debug)]
 pub struct Treap {
     root: usize,

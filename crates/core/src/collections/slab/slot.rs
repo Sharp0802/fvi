@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use core::mem::MaybeUninit;
 
-pub struct Slot<T> {
+pub(super) struct Slot<T> {
     next: usize,
     value: MaybeUninit<T>,
 }

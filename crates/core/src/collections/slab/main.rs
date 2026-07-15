@@ -1,9 +1,9 @@
 use core::ops::{Index, IndexMut};
 use std::vec::Vec;
 
-use crate::alloc::slot::Slot;
+use crate::collections::slab::slot::Slot;
 
-/// A slab container, for stable keys.
+/// A stable vector based on slab allocation.
 #[derive(Debug, Clone)]
 pub struct Slab<T> {
     len: usize,

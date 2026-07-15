@@ -3,17 +3,9 @@
 
 extern crate alloc as std;
 
-pub mod alloc;
+pub mod collections;
 pub mod math;
 pub mod piece;
-pub mod treap;
-
-/// A prelude module.
-pub mod prelude {
-    pub use super::alloc::Slab;
-    pub use super::piece::{Buffer, Piece, PieceDesc};
-    pub use super::treap::Treap;
-}
 
 #[inline]
 #[track_caller]
