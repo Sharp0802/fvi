@@ -6,7 +6,7 @@ use crate::collections::treap::state::{State, Verdict};
 use crate::collections::treap::{Iter, NIL};
 use crate::math::xorshift;
 use crate::piece::PieceDesc;
-use crate::unreachable;
+use crate::util::unreachable;
 
 macro_rules! debug_assert_dead_or_nil {
     ($self:ident, $at:expr) => {
