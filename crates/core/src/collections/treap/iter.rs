@@ -28,11 +28,10 @@ impl Iterator for Iter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let piece = self.treap.slab.get(self.cur)?.val;
+            self.cur = self.treap.next(self.cur);
             if piece.add_at <= self.version && self.version < piece.del_at {
                 return Some(piece);
             }
-
-            self.cur = self.treap.next(self.cur);
         }
     }
 }
