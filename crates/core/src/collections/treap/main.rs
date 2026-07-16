@@ -205,7 +205,7 @@ impl Treap {
             return (NIL, NIL);
         };
 
-        debug_assert!(root_v.val.del_at != u32::MAX, "cannot split deleted node");
+        debug_assert!(root_v.val.del_at == u32::MAX, "cannot split deleted node");
 
         // must be at latest version!
         // or node length will be mismatched.
