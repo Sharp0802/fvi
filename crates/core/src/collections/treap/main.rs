@@ -880,6 +880,158 @@ mod tests {
     }
 
     #[test]
+    fn rollback_prunes_future_insertions() {
+        let original = PieceDesc {
+            buffer: Buffer::Original,
+            start: 0,
+            end: 4,
+        };
+        let future = PieceDesc {
+            buffer: Buffer::Append,
+            start: 100,
+            end: 102,
+        };
+        let mut treap = Treap::new(0, 0);
+        treap.insert(0, original, 0);
+        treap.insert(2, future, 2);
+
+        let mut with_future = desc_tokens(PieceDesc {
+            buffer: Buffer::Original,
+            start: 0,
+            end: 2,
+        });
+        with_future.extend(desc_tokens(future));
+        with_future.extend(desc_tokens(PieceDesc {
+            buffer: Buffer::Original,
+            start: 2,
+            end: 4,
+        }));
+        assert_matches(&treap, 2, &with_future);
+
+        treap.remove(0, 0, 0);
+
+        let expected = desc_tokens(original);
+        assert_matches(&treap, 0, &expected);
+        assert_matches(&treap, 2, &expected);
+        assert_invariants(&mut treap);
+    }
+
+    #[test]
+    fn kill_detaches_child_subtrees() {
+        let descs = [
+            PieceDesc {
+                buffer: Buffer::Original,
+                start: 0,
+                end: 1,
+            },
+            PieceDesc {
+                buffer: Buffer::Append,
+                start: 10,
+                end: 11,
+            },
+            PieceDesc {
+                buffer: Buffer::Original,
+                start: 20,
+                end: 21,
+            },
+        ];
+        let build = || {
+            let mut treap = Treap::new(2, 0);
+            for desc in descs {
+                let end = treap.len_of(treap.root);
+                treap.insert(end, desc, 0);
+            }
+            assert_ne!(treap.slab[treap.root].lhs, NIL);
+            assert_ne!(treap.slab[treap.root].rhs, NIL);
+            assert_eq!(treap.len_of(treap.root), 3);
+            treap
+        };
+
+        let mut without_left = build();
+        let left = without_left.slab[without_left.root].lhs;
+        without_left.kill(left);
+        assert!(without_left.slab.get(left).is_none());
+        let mut expected = desc_tokens(descs[1]);
+        expected.extend(desc_tokens(descs[2]));
+        assert_matches(&without_left, 0, &expected);
+        assert_invariants(&mut without_left);
+
+        let mut without_right = build();
+        let right = without_right.slab[without_right.root].rhs;
+        without_right.kill(right);
+        assert!(without_right.slab.get(right).is_none());
+        let mut expected = desc_tokens(descs[0]);
+        expected.extend(desc_tokens(descs[1]));
+        assert_matches(&without_right, 0, &expected);
+        assert_invariants(&mut without_right);
+    }
+
+    #[test]
+    fn pop_leftmost_relinks_its_right_child() {
+        let descs = [
+            PieceDesc {
+                buffer: Buffer::Original,
+                start: 20,
+                end: 21,
+            },
+            PieceDesc {
+                buffer: Buffer::Original,
+                start: 0,
+                end: 1,
+            },
+            PieceDesc {
+                buffer: Buffer::Append,
+                start: 10,
+                end: 11,
+            },
+        ];
+        let mut treap = Treap::new(3, 0);
+        treap.insert(0, descs[0], 0);
+        treap.insert(0, descs[1], 0);
+        treap.insert(1, descs[2], 0);
+
+        let root = treap.root;
+        let first = treap.leftmost(root);
+        let successor = treap.slab[first].rhs;
+        assert_ne!(first, root);
+        assert_ne!(successor, NIL);
+
+        let (popped, rest) = treap.pop_leftmost(root);
+
+        assert_eq!(popped, first);
+        assert_eq!(rest, root);
+        assert_eq!(treap.slab[popped].prv, NIL);
+        assert_eq!(treap.slab[popped].rhs, NIL);
+        assert_eq!(treap.slab[root].lhs, successor);
+        assert_eq!(treap.slab[successor].prv, root);
+        assert!(treap.slab.remove(popped).is_some());
+
+        let mut expected = desc_tokens(descs[2]);
+        expected.extend(desc_tokens(descs[0]));
+        assert_matches(&treap, 0, &expected);
+        assert_invariants(&mut treap);
+    }
+
+    #[test]
+    fn internal_helpers_accept_nil() {
+        let mut treap = Treap::new(0, 0);
+
+        treap.kill(NIL);
+        treap.erase(NIL);
+        assert_eq!(treap.pop_leftmost(NIL), (NIL, NIL));
+        assert_eq!(treap.next(NIL), NIL);
+        assert_invariants(&mut treap);
+    }
+
+    #[test]
+    #[should_panic(expected = "offset out of bounds")]
+    fn split_unsafe_rejects_out_of_bounds_offset() {
+        let mut treap = Treap::new(0, 0);
+        treap.insert(0, descriptor(), 0);
+        _ = treap.split_unsafe(treap.root, 2);
+    }
+
+    #[test]
     fn empty_and_boundary_operations() {
         let mut treap = Treap::new(1, 0);
         treap.remove(0, 0, 0);
