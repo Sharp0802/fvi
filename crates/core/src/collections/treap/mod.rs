@@ -7,5 +7,5 @@ mod state;
 
 const NIL: usize = usize::MAX;
 
-pub use iter::{Iter, IterAll};
+pub use iter::Iter;
 pub use main::Treap;
