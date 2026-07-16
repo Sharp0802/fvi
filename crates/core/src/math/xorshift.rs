@@ -44,3 +44,15 @@ pub const fn xorshift(x: usize) -> usize {
     #[cfg(target_pointer_width = "16")]
     return xorshift16(x as u16) as usize;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exhaustive() {
+        _ = xorshift16(0);
+        _ = xorshift32(0);
+        _ = xorshift64(0);
+    }
+}
