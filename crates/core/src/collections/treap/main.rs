@@ -455,7 +455,7 @@ impl Treap {
             }
             Ordering::Less => {
                 let (rest, rhs) = self.split_unsafe(self.root, end);
-                let (lhs, mid) = self.split_unsafe(rest, end);
+                let (lhs, mid) = self.split_unsafe(rest, start);
                 self.slab[mid].val.del_at = version;
 
                 let root = self.merge(lhs, mid);
