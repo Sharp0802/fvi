@@ -171,8 +171,8 @@ mod tests {
     proptest! {
         #[test]
         fn match_models(ops in arb_op(256)) {
-            let mut mock = Mock::new();
-            let mut actual = Actual::new();
+            let mut mock = Mock::default();
+            let mut actual = Actual::default();
 
             for op in ops {
                 apply(op, &mut mock, &mut actual)?;
