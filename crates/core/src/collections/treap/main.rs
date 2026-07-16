@@ -242,6 +242,7 @@ impl Treap {
             if mid_pos != mid_len {
                 let (mid_l, mid_r) = root_v.val.split_at(mid_pos);
                 self.slab[root].val = mid_r;
+                self.invalidate(root);
 
                 let mid_lhs = self.slab.insert(mid_l.into());
                 let new_lhs = self.merge(root_v.lhs, mid_lhs);
