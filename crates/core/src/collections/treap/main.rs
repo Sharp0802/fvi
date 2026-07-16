@@ -169,7 +169,8 @@ impl Treap {
 
     #[must_use]
     fn concat(&mut self, a: usize, b: usize) -> usize {
-        let Some(a_rhs) = self.slab.get(self.rightmost(a)) else {
+        let a_rhs_i = self.rightmost(a);
+        let Some(a_rhs) = self.slab.get(a_rhs_i) else {
             return b;
         };
 
@@ -180,8 +181,8 @@ impl Treap {
         if let Some(coarsen) = a_rhs.val.coarsen(&b_lhs.val) {
             let (b_first, b_rest) = self.pop_leftmost(b);
 
-            self.slab[a].val = coarsen;
-            self.invalidate(a);
+            self.slab[a_rhs_i].val = coarsen;
+            self.invalidate(a_rhs_i);
 
             let rem = self.slab.remove(b_first);
             debug_assert!(rem.is_some());
