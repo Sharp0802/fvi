@@ -94,13 +94,15 @@ impl Treap {
 
     fn kill(&mut self, at: usize) {
         let Some(t) = self.slab.get(at) else { return };
+        let prv_i = t.prv;
 
-        if let Some(prv) = self.slab.get_mut(t.prv) {
+        if let Some(prv) = self.slab.get_mut(prv_i) {
             if prv.lhs == at {
                 prv.lhs = NIL;
             } else {
                 prv.rhs = NIL;
             }
+            self.invalidate(prv_i);
         }
 
         self.kill_unsafe(at);
