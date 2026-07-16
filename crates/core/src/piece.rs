@@ -131,9 +131,3 @@ impl Piece {
         }
     }
 }
-
-impl From<Piece> for PieceDesc {
-    fn from(value: Piece) -> Self {
-        value.desc()
-    }
-}
