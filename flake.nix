@@ -38,6 +38,7 @@
 
           packages = with pkgs; [
             cargo-deny
+            cargo-llvm-cov
             llvm-mingw.latest.ucrt
             (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
           ];
