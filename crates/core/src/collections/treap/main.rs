@@ -6,6 +6,7 @@ use crate::collections::treap::state::{State, Verdict};
 use crate::collections::treap::{Iter, NIL};
 use crate::math::xorshift;
 use crate::piece::PieceDesc;
+use crate::unreachable;
 
 macro_rules! debug_assert_alive {
     ($self:ident, $at:expr) => {
@@ -427,12 +428,15 @@ impl Treap {
         assert!(version != u32::MAX, "invalid version constant");
         assert!(start <= end, "invalid removal range");
 
-        if start == end {
-            return;
-        }
-
         if self.state.invalidate(version) {
             self.prune();
+        }
+
+        let len = self.len_of(self.root);
+        assert!(end <= len, "offset out of bounds");
+
+        if start == end {
+            return;
         }
 
         match end.cmp(&self.len_of(self.root)) {
@@ -459,7 +463,7 @@ impl Treap {
                 self.root = root;
             }
             Ordering::Greater => {
-                panic!("offset out of bounds");
+                unreachable();
             }
         }
     }
