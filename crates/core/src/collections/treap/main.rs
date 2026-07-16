@@ -8,23 +8,6 @@ use crate::math::xorshift;
 use crate::piece::PieceDesc;
 use crate::unreachable;
 
-macro_rules! debug_assert_alive {
-    ($self:ident, $at:expr) => {
-        #[cfg(debug_assertions)]
-        {
-            if let Some(t) = $self.slab.get($at) {
-                assert!(
-                    t.val.del_at == u32::MAX,
-                    "alive node expected; got {:?}.",
-                    t
-                );
-            } else {
-                panic!("alive node expected; got NIL.");
-            }
-        }
-    };
-}
-
 macro_rules! debug_assert_dead_or_nil {
     ($self:ident, $at:expr) => {
         #[cfg(debug_assertions)]
@@ -64,10 +47,6 @@ impl Treap {
             return 0;
         };
 
-        if t.val.del_at != u32::MAX {
-            return 0;
-        }
-
         if let Some(len) = t.len {
             len
         } else {
@@ -79,6 +58,21 @@ impl Treap {
             self.slab[at].len = Some(len);
             len
         }
+    }
+
+    fn mark_removed(&mut self, at: usize, version: u32) {
+        let Some(t) = self.slab.get(at).copied() else {
+            return;
+        };
+
+        self.mark_removed(t.lhs, version);
+        self.mark_removed(t.rhs, version);
+
+        let node = &mut self.slab[at];
+        if node.val.del_at == u32::MAX {
+            node.val.del_at = version;
+        }
+        node.len = None;
     }
 
     #[must_use]
@@ -112,8 +106,36 @@ impl Treap {
         self.kill_unsafe(at);
     }
 
+    fn erase(&mut self, at: usize) {
+        let Some(node) = self.slab.get(at).copied() else {
+            return;
+        };
+
+        self.reset_prv(node.lhs, NIL);
+        self.reset_prv(node.rhs, NIL);
+        let replace = self.merge(node.lhs, node.rhs);
+
+        if let Some(prv) = self.slab.get_mut(node.prv) {
+            if prv.lhs == at {
+                prv.lhs = replace;
+            } else {
+                debug_assert_eq!(prv.rhs, at);
+                prv.rhs = replace;
+            }
+            self.reset_prv(replace, node.prv);
+            self.invalidate(node.prv);
+        } else {
+            debug_assert_eq!(self.root, at);
+            self.root = replace;
+            self.reset_prv(replace, NIL);
+        }
+
+        let del = self.slab.remove(at);
+        debug_assert!(del.is_some());
+    }
+
     fn prune(&mut self) {
-        let mut cur = self.root;
+        let mut cur = self.leftmost(self.root);
         while cur != NIL {
             let next = self.next(cur);
 
@@ -123,7 +145,7 @@ impl Treap {
                     self.slab[cur].val.add_at = self.state.oldest;
                 }
                 Verdict::Kill => {
-                    self.kill(cur);
+                    self.erase(cur);
                 }
                 Verdict::Revive => {
                     self.slab[cur].val.del_at = u32::MAX;
@@ -206,8 +228,6 @@ impl Treap {
             return (NIL, NIL);
         };
 
-        debug_assert!(root_v.val.del_at == u32::MAX, "cannot split deleted node");
-
         // must be at latest version!
         // or node length will be mismatched.
         let lhs_len = self.len_of(root_v.lhs);
@@ -219,22 +239,22 @@ impl Treap {
                 debug_assert_dead_or_nil!(self, root_v.lhs);
                 (NIL, root)
             } else if pos == lhs_len {
-                debug_assert_alive!(self, root_v.lhs);
                 self.slab[root].lhs = NIL;
                 self.slab[root_v.lhs].prv = NIL;
                 self.invalidate(root);
 
                 (root_v.lhs, root)
             } else {
-                debug_assert_alive!(self, root_v.lhs);
                 let (a, b) = self.split_unsafe(root_v.lhs, pos);
-                self.slab[root].lhs = b;
+                self.slab[root].lhs = NIL;
                 self.invalidate(root);
 
                 self.reset_prv(a, NIL);
-                self.reset_prv(b, root);
+                self.reset_prv(b, NIL);
+                let rhs = self.merge(b, root);
+                //self.reset_prv(rhs, NIL);
 
-                (a, root)
+                (a, rhs)
             }
         } else if pos <= lhs_len + mid_len {
             // pos is on mid
@@ -242,9 +262,11 @@ impl Treap {
 
             if mid_pos != mid_len {
                 let (mid_l, mid_r) = root_v.val.split_at(mid_pos);
+                self.slab[root].lhs = NIL;
                 self.slab[root].val = mid_r;
                 self.invalidate(root);
 
+                self.reset_prv(root_v.lhs, NIL);
                 let mid_lhs = self.slab.insert(mid_l.into());
                 let new_lhs = self.merge(root_v.lhs, mid_lhs);
 
@@ -267,13 +289,14 @@ impl Treap {
             match rhs_pos.cmp(&rhs_len) {
                 Ordering::Less => {
                     let (a, b) = self.split_unsafe(root_v.rhs, rhs_pos);
-                    self.slab[root].rhs = a;
+                    self.slab[root].rhs = NIL;
                     self.invalidate(root);
 
-                    self.reset_prv(a, root);
+                    self.reset_prv(a, NIL);
                     self.reset_prv(b, NIL);
+                    let lhs = self.merge(root, a);
 
-                    (root, b)
+                    (lhs, b)
                 }
                 Ordering::Equal => (root, NIL),
                 Ordering::Greater => {
@@ -441,22 +464,22 @@ impl Treap {
 
         match end.cmp(&self.len_of(self.root)) {
             Ordering::Equal if start == 0 => {
-                self.slab[self.root].val.del_at = version;
+                self.mark_removed(self.root, version);
             }
             Ordering::Equal => {
                 let (rest, del) = self.split_unsafe(self.root, start);
-                self.slab[del].val.del_at = version;
+                self.mark_removed(del, version);
                 self.root = self.merge(rest, del);
             }
             Ordering::Less if start == 0 => {
                 let (del, rest) = self.split_unsafe(self.root, end);
-                self.slab[del].val.del_at = version;
+                self.mark_removed(del, version);
                 self.root = self.merge(del, rest);
             }
             Ordering::Less => {
                 let (rest, rhs) = self.split_unsafe(self.root, end);
                 let (lhs, mid) = self.split_unsafe(rest, start);
-                self.slab[mid].val.del_at = version;
+                self.mark_removed(mid, version);
 
                 let root = self.merge(lhs, mid);
                 let root = self.merge(root, rhs);
@@ -683,15 +706,9 @@ mod tests {
         let lhs_len = walk(treap, node.lhs, at, seen, inorder);
         inorder.push(at);
         let rhs_len = walk(treap, node.rhs, at, seen, inorder);
-        let expected_len = if node.val.del_at == u32::MAX {
-            lhs_len + node.val.desc().len() + rhs_len
-        } else {
-            0
-        };
+        let expected_len = lhs_len + node.val.len() + rhs_len;
 
-        if node.val.del_at == u32::MAX
-            && let Some(cached_len) = node.len
-        {
+        if let Some(cached_len) = node.len {
             assert_eq!(cached_len, expected_len, "stale cached length at node {at}");
         }
 
