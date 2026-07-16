@@ -17,7 +17,7 @@ pub enum Verdict {
 impl State {
     #[must_use]
     pub const fn new(version: u32) -> Self {
-        assert!(version != u32::MAX);
+        assert!(version != u32::MAX, "invalid version constant");
         Self {
             oldest: version,
             latest: version,
