@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::num::NonZero;
 
 use crate::collections::Slab;
 use crate::collections::treap::node::Node;
@@ -144,7 +145,7 @@ impl Treap {
             match self.state.verdict(&self.slab[cur].val) {
                 Verdict::None => {}
                 Verdict::Update => {
-                    self.slab[cur].val.add_at = self.state.oldest;
+                    self.slab[cur].val.add_at = self.state.oldest();
                 }
                 Verdict::Kill => {
                     self.erase(cur);
@@ -396,9 +397,9 @@ impl Treap {
     ///
     /// Panics if given version is reserved version value (`u32::MAX`).
     #[must_use]
-    pub const fn new(salt: usize, version: u32) -> Self {
+    pub const fn new(salt: usize, max_version_diff: u32, version: u32) -> Self {
         Self {
-            state: State::new(version),
+            state: State::new(max_version_diff, version),
             root: NIL,
             salt,
             slab: Slab::new(),
@@ -513,9 +514,12 @@ impl Treap {
 
         let len = self.len_of(self.root);
         if off == 0 {
-            core::mem::replace(self, Self::new(xorshift(self.salt), version))
+            core::mem::replace(
+                self,
+                Self::new(xorshift(self.salt), self.state.max_diff(), version),
+            )
         } else if off == len {
-            Self::new(xorshift(self.salt), version)
+            Self::new(xorshift(self.salt), self.state.max_diff(), version)
         } else if off < len {
             let (lhs, rhs) = self.split_unsafe(self.root, off);
             let mut cloned = self.clone();
