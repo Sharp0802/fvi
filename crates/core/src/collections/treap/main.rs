@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use crate::collections::Slab;
 use crate::collections::treap::node::Node;
 use crate::collections::treap::state::{State, Verdict};
@@ -48,7 +50,7 @@ pub struct Treap {
 
 // Node Accessors
 impl Treap {
-    fn invalidate(&mut self, mut at: usize) {
+    const fn invalidate(&mut self, mut at: usize) {
         while let Some(t) = self.slab.get_mut(at) {
             t.len = None;
             at = t.prv;
@@ -79,7 +81,7 @@ impl Treap {
     }
 
     #[must_use]
-    fn pri_of(&self, at: usize) -> usize {
+    const fn pri_of(&self, at: usize) -> usize {
         xorshift(at ^ self.salt)
     }
 }
@@ -190,7 +192,7 @@ impl Treap {
         }
     }
 
-    fn reset_prv(&mut self, at: usize, prv: usize) {
+    const fn reset_prv(&mut self, at: usize, prv: usize) {
         if let Some(t) = self.slab.get_mut(at) {
             t.prv = prv;
         }
@@ -259,19 +261,21 @@ impl Treap {
             let rhs_pos = pos - lhs_len - mid_len;
             let rhs_len = self.len_of(root_v.rhs);
 
-            if rhs_pos > rhs_len {
-                panic!("offset out of bounds");
-            } else if rhs_pos == rhs_len {
-                (root, NIL)
-            } else {
-                let (a, b) = self.split_unsafe(root_v.rhs, pos);
-                self.slab[root].rhs = a;
-                self.invalidate(root);
+            match rhs_pos.cmp(&rhs_len) {
+                Ordering::Less => {
+                    let (a, b) = self.split_unsafe(root_v.rhs, pos);
+                    self.slab[root].rhs = a;
+                    self.invalidate(root);
 
-                self.reset_prv(a, root);
-                self.reset_prv(b, NIL);
+                    self.reset_prv(a, root);
+                    self.reset_prv(b, NIL);
 
-                (root, b)
+                    (root, b)
+                }
+                Ordering::Equal => (root, NIL),
+                Ordering::Greater => {
+                    panic!("offset out of bounds");
+                }
             }
         }
     }
@@ -306,7 +310,7 @@ impl Treap {
     }
 
     #[must_use]
-    fn pop_leftmost(&mut self, root: usize) -> (usize, usize) {
+    const fn pop_leftmost(&mut self, root: usize) -> (usize, usize) {
         let lhs = self.leftmost(root);
 
         // NOTE: (lhs = NIL) iff (at = NIL)
@@ -375,7 +379,7 @@ impl Treap {
 
     /// Returns an iterator over pieces visible for given version.
     #[must_use]
-    pub const fn iter(&self, version: u32) -> Iter {
+    pub const fn iter(&self, version: u32) -> Iter<'_> {
         Iter::new(self, self.leftmost(self.root), version)
     }
 
@@ -429,21 +433,21 @@ impl Treap {
             self.prune();
         }
 
-        let len = self.len_of(self.root);
-        if end == len {
-            if start == 0 {
+        match end.cmp(&self.len_of(self.root)) {
+            Ordering::Equal if start == 0 => {
                 self.slab[self.root].val.del_at = version;
-            } else {
+            }
+            Ordering::Equal => {
                 let (rest, del) = self.split_unsafe(self.root, start);
                 self.slab[del].val.del_at = version;
                 self.root = self.merge(rest, del);
             }
-        } else if end < len {
-            if start == 0 {
+            Ordering::Less if start == 0 => {
                 let (del, rest) = self.split_unsafe(self.root, end);
                 self.slab[del].val.del_at = version;
                 self.root = self.merge(del, rest);
-            } else {
+            }
+            Ordering::Less => {
                 let (rest, rhs) = self.split_unsafe(self.root, end);
                 let (lhs, mid) = self.split_unsafe(rest, end);
                 self.slab[mid].val.del_at = version;
@@ -452,8 +456,9 @@ impl Treap {
                 let root = self.merge(root, rhs);
                 self.root = root;
             }
-        } else {
-            panic!("offset out of bounds");
+            Ordering::Greater => {
+                panic!("offset out of bounds");
+            }
         }
     }
 
