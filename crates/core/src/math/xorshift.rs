@@ -30,19 +30,17 @@ pub const fn xorshift64(mut x: u64) -> u64 {
 pub const fn xorshift(x: usize) -> usize {
     #![expect(clippy::cast_possible_truncation, reason = "pointer width checked")]
 
-    if cfg!(target_pointer_width = "64") {
-        xorshift64(x as u64) as usize
-    } else if cfg!(target_pointer_width = "32") {
-        xorshift32(x as u32) as usize
-    } else if cfg!(target_pointer_width = "16") {
-        xorshift16(x as u16) as usize
-    } else {
-        #[cfg(not(any(
-            target_pointer_width = "64",
-            target_pointer_width = "32",
-            target_pointer_width = "16"
-        )))]
-        compile_error!("unsupported target pointer width");
-        0
-    }
+    #[cfg(not(any(
+        target_pointer_width = "64",
+        target_pointer_width = "32",
+        target_pointer_width = "16"
+    )))]
+    compile_error!("unsupported target pointer width");
+
+    #[cfg(target_pointer_width = "64")]
+    return xorshift64(x as u64) as usize;
+    #[cfg(target_pointer_width = "32")]
+    return xorshift32(x as u32) as usize;
+    #[cfg(target_pointer_width = "16")]
+    return xorshift16(x as u16) as usize;
 }
