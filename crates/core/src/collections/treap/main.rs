@@ -266,7 +266,7 @@ impl Treap {
 
             match rhs_pos.cmp(&rhs_len) {
                 Ordering::Less => {
-                    let (a, b) = self.split_unsafe(root_v.rhs, pos);
+                    let (a, b) = self.split_unsafe(root_v.rhs, rhs_pos);
                     self.slab[root].rhs = a;
                     self.invalidate(root);
 
