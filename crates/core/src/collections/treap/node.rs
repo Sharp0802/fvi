@@ -2,7 +2,7 @@ use crate::piece::Piece;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Node {
-    pub len: u64,
+    pub len: Option<u64>,
     pub prv: usize,
     pub lhs: usize,
     pub rhs: usize,
@@ -12,7 +12,7 @@ pub struct Node {
 impl From<Piece> for Node {
     fn from(value: Piece) -> Self {
         Self {
-            len: value.len(),
+            len: Some(value.len()),
             prv: usize::MAX,
             lhs: usize::MAX,
             rhs: usize::MAX,

@@ -3,6 +3,7 @@
 mod iter;
 mod main;
 mod node;
+mod state;
 
 const NIL: usize = usize::MAX;
 

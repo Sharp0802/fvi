@@ -28,8 +28,8 @@ impl PieceDesc {
             buffer: self.buffer,
             start: self.start,
             end: self.end,
-            add_version,
-            del_version: u32::MAX,
+            add_at: add_version,
+            del_at: u32::MAX,
         }
     }
 
@@ -56,9 +56,9 @@ pub struct Piece {
     /// An exclusive ending offset on buffer, in bytes.
     pub end: u64,
     /// An editing version counter for insertion.
-    pub add_version: u32,
+    pub add_at: u32,
     /// An editing version counter for removal.
-    pub del_version: u32,
+    pub del_at: u32,
 }
 
 impl Piece {
@@ -82,7 +82,7 @@ impl Piece {
         "#
     )]
     pub const fn len(&self) -> u64 {
-        if self.del_version == u32::MAX {
+        if self.del_at == u32::MAX {
             self.desc().len()
         } else {
             0
@@ -114,8 +114,8 @@ impl Piece {
     pub fn precede(&self, other: &Self) -> bool {
         let tmp = self.end == other.start;
         tmp && self.buffer == other.buffer
-            && self.add_version == other.add_version
-            && self.del_version == other.del_version
+            && self.add_at == other.add_at
+            && self.del_at == other.del_at
     }
 
     /// Coarsen given two [`Piece`],
