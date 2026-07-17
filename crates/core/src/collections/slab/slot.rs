@@ -94,3 +94,22 @@ impl<T: Clone> Clone for Slot<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use core::fmt::Write;
+    use std::string::String;
+
+    use super::*;
+
+    #[test]
+    fn exhaustive() {
+        let mut slot = Slot::new(0, 0u32);
+        assert!(slot.take().is_some());
+        assert!(slot.as_mut().is_none());
+
+        let mut buf = String::new();
+        write!(buf, "{slot:?}").expect("cannot fail");
+        assert!(buf.contains("value: None"));
+    }
+}
