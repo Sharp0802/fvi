@@ -953,6 +953,31 @@ mod tests {
         assert_audit(&versioned);
     }
 
+    #[test]
+    fn coarsen_leftmost_subtree_shapes() {
+        let cx = context(0, 4);
+
+        for (salt, has_parent, has_rhs) in [(0, true, false), (1, false, true)] {
+            let mut table = Table::new(salt, &cx);
+            table.insert(&cx, 0, desc(Buffer::Original, 2, 4));
+            table.insert(&cx, 2, desc(Buffer::Append, 10, 11));
+
+            let leftmost = table.leftmost(table.root);
+            assert_eq!(table.slab[leftmost].prv != NIL, has_parent);
+            assert_eq!(table.slab[leftmost].rhs != NIL, has_rhs);
+
+            table.insert(&cx, 0, desc(Buffer::Original, 1, 2));
+            assert_eq!(
+                pieces(&table, 0),
+                std::vec![
+                    piece(Buffer::Original, 1, 4, 0, None),
+                    piece(Buffer::Append, 10, 11, 0, None),
+                ]
+            );
+            assert_audit(&table);
+        }
+    }
+
     fn assert_removal_view(start: u64, end: u64, expected: &[Atom]) {
         let mut cx = context(0, 4);
         let mut table = Table::new(0xBEEF, &cx);
