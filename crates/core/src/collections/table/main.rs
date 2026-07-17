@@ -155,6 +155,7 @@ impl Table {
                 }
                 Verdict::Revive => {
                     self.slab[cur].val.del_at = None;
+                    self.invalidate(cur);
                 }
             }
 
