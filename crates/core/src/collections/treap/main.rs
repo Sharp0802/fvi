@@ -23,7 +23,7 @@ macro_rules! debug_assert_dead_or_nil {
     };
 }
 
-/// A low-level piece table implemented with an implicit treap.
+/// A piece table implemented with an implicit treap.
 #[derive(Debug, Clone)]
 pub struct Treap {
     state: State,
@@ -463,6 +463,9 @@ impl Treap {
     /// It may attept to prune nodes by iterating in `O(n)`,
     /// if given context (`cx`) requires rewind some of retained history
     /// (that means the context has older version than latest version of this [`Treap`]).
+    ///
+    /// It may clear this [`Treap`] that specifying a version older than retained history.
+    /// Note that the allocated capacity isn't affected by clearing anyway.
     pub fn update(&mut self, cx: &Context) {
         if self.state.update(cx) {
             self.prune();
@@ -471,8 +474,8 @@ impl Treap {
 
     /// Inserts given descriptor at specified offset to this [`Treap`].
     ///
-    /// It may iterates whole treap conditionally.
-    /// See [`update`].
+    /// Rewinding the version can cause iterating all nodes.
+    /// See [`Treap::update()`].
     ///
     /// # Panics
     ///
@@ -497,6 +500,9 @@ impl Treap {
     }
 
     /// Marks given range as removed from this [`Treap`].
+    ///
+    /// Rewinding the version can cause iterating all nodes.
+    /// See [`Treap::update()`].
     ///
     /// # Panics
     ///
@@ -544,8 +550,10 @@ impl Treap {
         }
     }
 
-    /// Splits this [`Treap`] at given offset,
-    /// versioned by given version value.
+    /// Splits this [`Treap`] at given offset.
+    ///
+    /// Rewinding the version can cause iterating all nodes.
+    /// See [`Treap::update()`].
     ///
     /// # Panics
     ///
