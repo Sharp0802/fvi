@@ -1,4 +1,4 @@
-use crate::cfg::Context;
+use crate::cfg::Config;
 use crate::unit::{Px, Unit};
 
 super::decl_unit!(
@@ -8,12 +8,7 @@ super::decl_unit!(
 
 impl Unit for Dp {
     #[inline]
-    fn px(&self, ctx: &Context) -> Px {
-        Px::new(self.0 * (ctx.dpi / 160.0))
-    }
-
-    #[inline]
-    fn zero() -> Self {
-        Self::new(0.0)
+    fn px(&self, cfg: &Config) -> Px {
+        Px::new(self.0 * (cfg.dpi / 160.0))
     }
 }

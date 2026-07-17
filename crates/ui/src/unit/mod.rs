@@ -11,7 +11,7 @@ pub use sp::*;
 
 use macros::decl_unit;
 
-use crate::cfg::Context;
+use crate::cfg::Config;
 use crate::impl_op;
 
 /// Creates new logical size, in [`Dp`].
@@ -57,16 +57,8 @@ impl Vp {
 
 impl Unit for Vp {
     #[inline]
-    fn px(&self, ctx: &Context) -> Px {
-        self.dp.px(ctx) + self.sp.px(ctx)
-    }
-
-    #[inline]
-    fn zero() -> Self {
-        Self {
-            dp: Dp::zero(),
-            sp: Sp::zero(),
-        }
+    fn px(&self, cfg: &Config) -> Px {
+        self.dp.px(cfg) + self.sp.px(cfg)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::cfg::Context;
+use crate::cfg::Config;
 
 super::decl_unit!(
     /// A physical size, in unscaled pixels.
@@ -12,21 +12,13 @@ impl Px {
 
 /// A trait to convert units into unscaled pixels.
 pub trait Unit {
-    /// Returns a size equivalents to 0px.
-    #[must_use]
-    fn zero() -> Self;
-
     /// Converts into unscaled pixels using given context.
     #[must_use]
-    fn px(&self, ctx: &Context) -> Px;
+    fn px(&self, cfg: &Config) -> Px;
 }
 
 impl Unit for Px {
-    fn zero() -> Self {
-        Self::ZERO
-    }
-
-    fn px(&self, _ctx: &Context) -> Px {
+    fn px(&self, _cfg: &Config) -> Px {
         *self
     }
 }

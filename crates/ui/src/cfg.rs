@@ -2,7 +2,7 @@
 
 /// Layout measuring context.
 #[derive(Debug)]
-pub struct Context {
+pub struct Config {
     /// DPI of surface.
     pub dpi: f32,
     /// General UI scale factor.
