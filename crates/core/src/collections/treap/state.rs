@@ -1,10 +1,10 @@
+use crate::collections::treap::{Context, Version};
 use crate::piece::Piece;
 
 #[derive(Debug, Clone)]
 pub struct State {
-    max_diff: u32,
-    oldest: u32,
-    latest: u32,
+    pub oldest: Version,
+    pub latest: Version,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -17,44 +17,27 @@ pub enum Verdict {
 
 impl State {
     #[must_use]
-    pub const fn new(max_diff: u32, version: u32) -> Self {
-        assert!(version != u32::MAX, "invalid version constant");
+    pub const fn new(cx: &Context) -> Self {
         Self {
-            max_diff,
-            oldest: version,
-            latest: version,
+            oldest: cx.version,
+            latest: cx.version,
         }
     }
 
-    #[must_use]
-    pub const fn max_diff(&self) -> u32 {
-        self.max_diff
-    }
-
-    #[must_use]
-    pub const fn oldest(&self) -> u32 {
-        self.oldest
-    }
-
-    #[must_use]
-    pub const fn latest(&self) -> u32 {
-        self.latest
-    }
-
-    /// Sets latest version as given,
+    /// Updates this [`State`] with the given context,
     /// returning whether the eager pruning should be called.
     #[must_use]
-    pub fn invalidate(&mut self, version: u32) -> bool {
-        self.oldest = self.oldest.max(version.saturating_sub(self.max_diff));
-        let top = core::mem::replace(&mut self.latest, version);
-        top > version
+    pub fn update(&mut self, cx: &Context) -> bool {
+        self.oldest = self.oldest.max(cx.possible_oldest());
+        let top = core::mem::replace(&mut self.latest, cx.version);
+        top > cx.version
     }
 
     #[must_use]
-    pub const fn verdict(&self, piece: &Piece) -> Verdict {
-        if piece.del_at < self.oldest || self.latest < piece.add_at {
+    pub fn verdict(&self, piece: &Piece) -> Verdict {
+        if piece.del_at.is_some_and(|t| t < self.oldest) || self.latest < piece.add_at {
             Verdict::Kill
-        } else if piece.del_at > self.latest {
+        } else if piece.del_at.is_some_and(|t| t > self.latest) {
             Verdict::Revive
         } else if piece.add_at < self.oldest {
             Verdict::Update

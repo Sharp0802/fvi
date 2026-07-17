@@ -12,7 +12,7 @@ pub struct Node {
 impl From<Piece> for Node {
     fn from(value: Piece) -> Self {
         Self {
-            len: Some(value.len()),
+            len: Some(value.desc().len()),
             prv: usize::MAX,
             lhs: usize::MAX,
             rhs: usize::MAX,

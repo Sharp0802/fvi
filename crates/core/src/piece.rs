@@ -1,5 +1,7 @@
 //! A module providing types related to piece.
 
+use crate::collections::treap::Version;
+
 /// An enumeration representing type of buffers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Buffer {
@@ -23,13 +25,13 @@ pub struct PieceDesc {
 impl PieceDesc {
     /// Builds a [`Piece`] from this [`PieceDesc`] using specified states.
     #[must_use]
-    pub const fn build(self, add_version: u32) -> Piece {
+    pub const fn build(self, add_at: Version) -> Piece {
         Piece {
             buffer: self.buffer,
             start: self.start,
             end: self.end,
-            add_at: add_version,
-            del_at: u32::MAX,
+            add_at,
+            del_at: None,
         }
     }
 
@@ -56,9 +58,9 @@ pub struct Piece {
     /// An exclusive ending offset on buffer, in bytes.
     pub end: u64,
     /// An editing version counter for insertion.
-    pub add_at: u32,
+    pub add_at: Version,
     /// An editing version counter for removal.
-    pub del_at: u32,
+    pub del_at: Option<Version>,
 }
 
 impl Piece {
@@ -72,21 +74,10 @@ impl Piece {
         }
     }
 
-    /// Returns the length of this [`Piece`], in bytes.
+    /// Returns whether this [`Piece`] is visible at given version.
     #[must_use]
-    #[expect(
-        clippy::len_without_is_empty,
-        reason = r#"
-            semantic of this len() is not appropriate for
-            is_empty() since it varies by field `deleted`
-        "#
-    )]
-    pub const fn len(&self) -> u64 {
-        if self.del_at == u32::MAX {
-            self.desc().len()
-        } else {
-            0
-        }
+    pub fn is_visible_at(&self, version: Version) -> bool {
+        self.add_at <= version && self.del_at.is_none_or(|t| version < t)
     }
 
     /// Splits [`Piece`] at given relative offset.
