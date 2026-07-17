@@ -133,3 +133,19 @@ impl Piece {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exhaustive() {
+        let desc = PieceDesc {
+            buffer: Buffer::Original,
+            start: 0xCAFE,
+            end: 0xCAFE,
+        };
+
+        assert!(desc.is_empty());
+    }
+}
