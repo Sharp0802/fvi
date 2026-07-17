@@ -1,19 +1,19 @@
 use core::iter::FusedIterator;
 
-use crate::collections::treap::{Treap, Version};
+use crate::collections::table::{Table, Version};
 use crate::piece::Piece;
 
-/// An iterator over visible pieces in [`Treap`].
+/// An iterator over visible pieces in [`Table`].
 #[derive(Debug)]
 pub struct Iter<'a> {
-    treap: &'a Treap,
+    treap: &'a Table,
     version: Version,
     cur: usize,
 }
 
 impl<'a> Iter<'a> {
     #[inline]
-    pub(super) fn new(treap: &'a Treap, leftmost: usize, version: Version) -> Self {
+    pub(super) fn new(treap: &'a Table, leftmost: usize, version: Version) -> Self {
         debug_assert!(
             treap
                 .slab

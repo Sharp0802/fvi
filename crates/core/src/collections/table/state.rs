@@ -1,4 +1,4 @@
-use crate::collections::treap::{Context, Version};
+use crate::collections::table::{Context, Version};
 use crate::piece::Piece;
 
 #[derive(Debug, Clone)]

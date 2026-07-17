@@ -1,7 +1,7 @@
 //! Collection types.
 
 pub mod slab;
-pub mod treap;
+pub mod table;
 
 pub use slab::Slab;
-pub use treap::Treap;
+pub use table::Table;

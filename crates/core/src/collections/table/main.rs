@@ -1,9 +1,9 @@
 use core::cmp::Ordering;
 
 use crate::collections::Slab;
-use crate::collections::treap::node::Node;
-use crate::collections::treap::state::{State, Verdict};
-use crate::collections::treap::{Context, Iter, NIL, Version};
+use crate::collections::table::node::Node;
+use crate::collections::table::state::{State, Verdict};
+use crate::collections::table::{Context, Iter, NIL, Version};
 use crate::math::xorshift;
 use crate::piece::PieceDesc;
 use crate::util::unreachable;
@@ -25,7 +25,7 @@ macro_rules! debug_assert_dead_or_nil {
 
 /// A piece table implemented with an implicit treap.
 #[derive(Debug, Clone)]
-pub struct Treap {
+pub struct Table {
     state: State,
     root: usize,
     salt: usize,
@@ -33,7 +33,7 @@ pub struct Treap {
 }
 
 // Node Accessors
-impl Treap {
+impl Table {
     const fn invalidate(&mut self, mut at: usize) {
         while let Some(t) = self.slab.get_mut(at) {
             t.len = None;
@@ -88,7 +88,7 @@ impl Treap {
 }
 
 // Kill
-impl Treap {
+impl Table {
     fn kill_all_unsafe(&mut self, at: usize) {
         let Some(t) = self.slab.remove(at) else {
             return;
@@ -164,7 +164,7 @@ impl Treap {
 }
 
 // Merge / Split
-impl Treap {
+impl Table {
     #[must_use]
     fn merge(&mut self, a: usize, b: usize) -> usize {
         match (self.slab.get(a), self.slab.get(b)) {
@@ -309,7 +309,7 @@ impl Treap {
 }
 
 // Queries
-impl Treap {
+impl Table {
     #[must_use]
     const fn leftmost(&self, mut at: usize) -> usize {
         while let Some(v) = self.slab.get(at) {
@@ -436,8 +436,8 @@ impl Treap {
 }
 
 // Publics
-impl Treap {
-    /// Creates a new [`Treap`].
+impl Table {
+    /// Creates a new [`Table`].
     ///
     /// # Panics
     ///
@@ -458,13 +458,13 @@ impl Treap {
         Iter::new(self, self.leftmost_visible(self.root, version), version)
     }
 
-    /// Updates this [`Treap`] to follow state of given context (`cx`).
+    /// Updates this [`Table`] to follow state of given context (`cx`).
     ///
     /// It may attept to prune nodes by iterating in `O(n)`,
     /// if given context (`cx`) requires rewind some of retained history
-    /// (that means the context has older version than latest version of this [`Treap`]).
+    /// (that means the context has older version than latest version of this [`Table`]).
     ///
-    /// It may clear this [`Treap`] that specifying a version older than retained history.
+    /// It may clear this [`Table`] that specifying a version older than retained history.
     /// Note that the allocated capacity isn't affected by clearing anyway.
     pub fn update(&mut self, cx: &Context) {
         if self.state.update(cx) {
@@ -472,10 +472,10 @@ impl Treap {
         }
     }
 
-    /// Inserts given descriptor at specified offset to this [`Treap`].
+    /// Inserts given descriptor at specified offset to this [`Table`].
     ///
     /// Rewinding the version can cause iterating all nodes.
-    /// See [`Treap::update()`].
+    /// See [`Table::update()`].
     ///
     /// # Panics
     ///
@@ -499,10 +499,10 @@ impl Treap {
         self.root = self.concat(tmp, rhs);
     }
 
-    /// Marks given range as removed from this [`Treap`].
+    /// Marks given range as removed from this [`Table`].
     ///
     /// Rewinding the version can cause iterating all nodes.
-    /// See [`Treap::update()`].
+    /// See [`Table::update()`].
     ///
     /// # Panics
     ///
@@ -550,10 +550,10 @@ impl Treap {
         }
     }
 
-    /// Splits this [`Treap`] at given offset.
+    /// Splits this [`Table`] at given offset.
     ///
     /// Rewinding the version can cause iterating all nodes.
-    /// See [`Treap::update()`].
+    /// See [`Table::update()`].
     ///
     /// # Panics
     ///

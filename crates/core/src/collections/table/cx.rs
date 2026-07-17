@@ -1,6 +1,6 @@
 use core::num::NonZero;
 
-use crate::collections::treap::Version;
+use crate::collections::table::Version;
 use crate::util::unreachable;
 
 /// An editing context

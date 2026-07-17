@@ -1,6 +1,6 @@
 //! A module providing types related to piece.
 
-use crate::collections::treap::Version;
+use crate::collections::table::Version;
 
 /// An enumeration representing type of buffers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
