@@ -324,26 +324,6 @@ impl Table {
     }
 
     #[must_use]
-    fn leftmost_visible(&self, mut at: usize, version: Version) -> usize {
-        let Some(mut curr) = self.slab.get(at) else {
-            return NIL;
-        };
-
-        if !curr.val.is_visible_at(version) {
-            return self.leftmost_visible(curr.rhs, version);
-        }
-
-        while let Some(v) = self.slab.get(curr.lhs)
-            && v.val.is_visible_at(version)
-        {
-            at = curr.lhs;
-            curr = v;
-        }
-
-        at
-    }
-
-    #[must_use]
     const fn rightmost(&self, mut at: usize) -> usize {
         while let Some(v) = self.slab.get(at) {
             if v.rhs == NIL {
@@ -407,31 +387,52 @@ impl Table {
     }
 
     #[must_use]
-    pub(super) fn next_visible(&self, cur: usize, version: Version) -> usize {
-        let Some(node) = self.slab.get(cur) else {
-            return NIL;
-        };
+    fn leftmost_visible(&self, root: usize, version: Version) -> usize {
+        let mut lm = self.leftmost(root);
 
-        if node.rhs != NIL {
-            let next = self.leftmost_visible(node.rhs, version);
-            if next != NIL {
-                return next;
-            }
-        }
-
-        let mut x = cur;
-        let mut p = node.prv;
-
-        while let Some(prv) = self.slab.get(p) {
-            if prv.lhs == x {
-                break;
+        while let Some(&lm_v) = self.slab.get(lm) {
+            if lm_v.val.is_visible_at(version) {
+                return lm;
             }
 
-            x = p;
-            p = prv.prv;
+            if lm_v.rhs != NIL {
+                let rhs_lm = self.leftmost_visible(lm_v.rhs, version);
+                if rhs_lm != NIL {
+                    return rhs_lm;
+                }
+            }
+
+            let mut prv = lm_v.prv;
+
+            while let Some(prv_v) = self.slab.get(prv) {
+                if prv_v.lhs == lm {
+                    break;
+                }
+
+                lm = prv;
+                prv = prv_v.prv;
+            }
+
+            lm = prv;
         }
 
-        p
+        NIL
+    }
+
+    #[must_use]
+    pub(super) fn next_visible(&self, mut cur: usize, version: Version) -> usize {
+        loop {
+            let next = self.next(cur);
+            if let Some(next_v) = self.slab.get(next) {
+                if next_v.val.is_visible_at(version) {
+                    break next;
+                }
+
+                cur = next;
+            } else {
+                break NIL;
+            }
+        }
     }
 }
 
