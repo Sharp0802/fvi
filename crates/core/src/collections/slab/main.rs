@@ -179,4 +179,12 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn exhaustive() {
+        let slab = Actual::new();
+        assert_eq!(slab.capacity(), 0);
+        assert_eq!(slab.len(), 0);
+        assert!(slab.is_empty());
+    }
 }
