@@ -330,7 +330,7 @@ impl Table {
         };
 
         if !curr.val.is_visible_at(version) {
-            return NIL;
+            return self.leftmost_visible(curr.rhs, version);
         }
 
         while let Some(v) = self.slab.get(curr.lhs)
