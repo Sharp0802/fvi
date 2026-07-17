@@ -586,3 +586,714 @@ impl Table {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![expect(
+        clippy::should_panic_without_expect,
+        reason = "panic messages are not part of public contract"
+    )]
+
+    use core::num::NonZero;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest::test_runner::{TestCaseError, TestCaseResult};
+    use std::collections::BTreeMap;
+    use std::vec::Vec;
+
+    use super::*;
+    use crate::piece::{Buffer, Piece};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct Atom {
+        buffer: Buffer,
+        offset: u64,
+    }
+
+    #[derive(Debug, Clone)]
+    struct Model {
+        history: BTreeMap<u32, Vec<Atom>>,
+        current: u32,
+        oldest: u32,
+        query_floor: u32,
+        undo_max_len: u32,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum Op {
+        Insert { off: u16, append: bool, len: u8 },
+        Remove { a: u16, b: u16 },
+        SwitchVersion { version: u8 },
+        Split { off: u16, keep_right: bool },
+    }
+
+    fn version(raw: u32) -> Version {
+        Version::new(raw).expect("test versions are not reserved")
+    }
+
+    fn context(raw: u32, undo_max_len: u32) -> Context {
+        Context {
+            undo_max_len: NonZero::new(undo_max_len).expect("undo length is nonzero"),
+            version: version(raw),
+        }
+    }
+
+    const fn desc(buffer: Buffer, start: u64, end: u64) -> PieceDesc {
+        PieceDesc { buffer, start, end }
+    }
+
+    fn piece(buffer: Buffer, start: u64, end: u64, add_at: u32, del_at: Option<u32>) -> Piece {
+        Piece {
+            buffer,
+            start,
+            end,
+            add_at: version(add_at),
+            del_at: del_at.map(version),
+        }
+    }
+
+    fn atoms(buffer: Buffer, start: u64, end: u64) -> Vec<Atom> {
+        (start..end).map(|offset| Atom { buffer, offset }).collect()
+    }
+
+    fn flatten(table: &Table, at: Version) -> Vec<Atom> {
+        table
+            .iter(at)
+            .flat_map(|piece| {
+                assert!(piece.start < piece.end, "empty piece returned by iterator");
+                assert!(
+                    piece.is_visible_at(at),
+                    "invisible piece returned by iterator"
+                );
+                (piece.start..piece.end).map(move |offset| Atom {
+                    buffer: piece.buffer,
+                    offset,
+                })
+            })
+            .collect()
+    }
+
+    fn pieces(table: &Table, at: u32) -> Vec<Piece> {
+        table.iter(version(at)).collect()
+    }
+
+    fn assert_view(table: &Table, at: u32, expected: &[Atom]) {
+        assert_eq!(flatten(table, version(at)), expected);
+    }
+
+    fn audit_node(
+        table: &Table,
+        at: usize,
+        parent: usize,
+        seen: &mut [bool],
+    ) -> Result<(u64, usize), TestCaseError> {
+        if at == NIL {
+            return Ok((0, 0));
+        }
+
+        prop_assert!(at < seen.len(), "node key exceeds slab capacity");
+        prop_assert!(!seen[at], "cycle or duplicate child at node {at}");
+        seen[at] = true;
+
+        prop_assert!(
+            table.slab.get(at).is_some(),
+            "reachable node must be occupied"
+        );
+        let node = table.slab.get(at).expect("reachable node must be occupied");
+        prop_assert_eq!(node.prv, parent, "incorrect parent pointer at node {}", at);
+        prop_assert!(node.val.start < node.val.end, "empty node at {at}");
+        if let Some(del_at) = node.val.del_at {
+            prop_assert!(node.val.add_at <= del_at, "piece deleted before insertion");
+        }
+
+        for child in [node.lhs, node.rhs] {
+            if child != NIL {
+                prop_assert!(
+                    table.pri_of(at) >= table.pri_of(child),
+                    "treap priority violation between {at} and {child}"
+                );
+            }
+        }
+
+        let (lhs_len, lhs_count) = audit_node(table, node.lhs, at, seen)?;
+        let (rhs_len, rhs_count) = audit_node(table, node.rhs, at, seen)?;
+        let mid_len = if node.val.is_visible_at(table.state.latest) {
+            node.val.desc().len()
+        } else {
+            0
+        };
+        let expected_len = lhs_len
+            .checked_add(mid_len)
+            .and_then(|len| len.checked_add(rhs_len));
+        prop_assert!(expected_len.is_some(), "generated table length fits u64");
+        let expected_len = expected_len.expect("length checked above");
+
+        if let Some(cached) = node.len {
+            prop_assert_eq!(cached, expected_len, "stale length cache at node {}", at);
+        }
+
+        Ok((expected_len, lhs_count + rhs_count + 1))
+    }
+
+    fn audit(table: &Table) -> TestCaseResult {
+        if table.root == NIL {
+            prop_assert_eq!(table.slab.len(), 0, "empty root leaked slab nodes");
+            return Ok(());
+        }
+
+        prop_assert_eq!(
+            table.slab[table.root].prv,
+            NIL,
+            "root must not have a parent"
+        );
+
+        let mut seen = std::vec![false; table.slab.capacity()];
+        let (visible_len, reachable) = audit_node(table, table.root, NIL, &mut seen)?;
+        prop_assert_eq!(
+            reachable,
+            table.slab.len(),
+            "unreachable occupied slab node"
+        );
+
+        let iter_len = flatten(table, table.state.latest).len() as u64;
+        prop_assert_eq!(
+            visible_len,
+            iter_len,
+            "tree and iterator disagree on length"
+        );
+
+        let mut cloned = table.clone();
+        let root = cloned.root;
+        prop_assert_eq!(
+            cloned.len_of(root),
+            visible_len,
+            "computed root length is not the visible length"
+        );
+        Ok(())
+    }
+
+    fn assert_audit(table: &Table) {
+        if let Err(error) = audit(table) {
+            panic!("table invariant audit failed: {error}");
+        }
+    }
+
+    impl Model {
+        fn new(undo_max_len: u32) -> Self {
+            Self {
+                history: BTreeMap::from([(0, Vec::new())]),
+                current: 0,
+                oldest: 0,
+                query_floor: 0,
+                undo_max_len,
+            }
+        }
+
+        const fn possible_oldest(&self, at: u32) -> u32 {
+            (at + 1).saturating_sub(self.undo_max_len)
+        }
+
+        fn touch(&mut self) {
+            self.oldest = self.oldest.max(self.possible_oldest(self.current));
+        }
+
+        fn switch_to(&mut self, next: u32) {
+            self.oldest = self.oldest.max(self.possible_oldest(next));
+
+            if next < self.current {
+                let view = if next < self.oldest {
+                    Vec::new()
+                } else {
+                    self.history
+                        .get(&next)
+                        .expect("generated rewind targets retained history")
+                        .clone()
+                };
+                self.history.retain(|&at, _| at <= next);
+                self.history.insert(next, view);
+            } else if next > self.current {
+                let view = self
+                    .history
+                    .get(&self.current)
+                    .expect("current model snapshot exists")
+                    .clone();
+                for at in (self.current + 1)..=next {
+                    self.history.insert(at, view.clone());
+                }
+            }
+
+            self.current = next;
+        }
+
+        fn current_view(&self) -> &Vec<Atom> {
+            self.history
+                .get(&self.current)
+                .expect("current model snapshot exists")
+        }
+
+        fn current_view_mut(&mut self) -> &mut Vec<Atom> {
+            self.history
+                .get_mut(&self.current)
+                .expect("current model snapshot exists")
+        }
+
+        fn insert(&mut self, off: usize, inserted: &[Atom]) {
+            self.touch();
+            self.current_view_mut()
+                .splice(off..off, inserted.iter().copied());
+        }
+
+        fn remove(&mut self, start: usize, end: usize) {
+            self.touch();
+            self.current_view_mut().drain(start..end);
+        }
+
+        fn split(&mut self, off: usize, keep_right: bool) -> (Vec<Atom>, Vec<Atom>) {
+            self.touch();
+            let view = self.current_view();
+            let lhs = view[..off].to_vec();
+            let rhs = view[off..].to_vec();
+            let retained = if keep_right { rhs.clone() } else { lhs.clone() };
+
+            self.history.clear();
+            self.history.insert(self.current, retained);
+            self.query_floor = self.current;
+
+            (lhs, rhs)
+        }
+
+        fn minimum_query_version(&self) -> u32 {
+            self.oldest.max(self.query_floor)
+        }
+    }
+
+    fn assert_model(table: &Table, model: &Model) -> TestCaseResult {
+        for (&at, expected) in &model.history {
+            if at >= model.minimum_query_version() {
+                let actual = flatten(table, version(at));
+                prop_assert_eq!(actual.as_slice(), expected.as_slice());
+            }
+        }
+        Ok(())
+    }
+
+    fn arb_op() -> impl Strategy<Value = Op> {
+        prop_oneof![
+            5 => (any::<u16>(), any::<bool>(), 0u8..=8).prop_map(|(off, append, len)| {
+                Op::Insert { off, append, len }
+            }),
+            4 => (any::<u16>(), any::<u16>()).prop_map(|(a, b)| Op::Remove { a, b }),
+            3 => (0u8..=16).prop_map(|version| Op::SwitchVersion { version }),
+            2 => (any::<u16>(), any::<bool>())
+                .prop_map(|(off, keep_right)| Op::Split { off, keep_right }),
+        ]
+    }
+
+    #[test]
+    fn test_no_op() {
+        let cx = context(0, 4);
+        let mut table = Table::new(0, &cx);
+
+        let mut iter = table.iter(cx.version);
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+
+        table.insert(&cx, 0, desc(Buffer::Original, 4, 4));
+        table.remove(&cx, 0, 0);
+        assert_view(&table, 0, &[]);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn test_insert() {
+        let cx = context(0, 4);
+        let mut table = Table::new(0xCAFE, &cx);
+
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 8));
+        table.insert(&cx, 4, desc(Buffer::Append, 100, 104));
+
+        let mut expected = atoms(Buffer::Original, 0, 4);
+        expected.extend(atoms(Buffer::Append, 100, 104));
+        expected.extend(atoms(Buffer::Original, 4, 8));
+        assert_view(&table, 0, &expected);
+        assert_eq!(
+            pieces(&table, 0),
+            std::vec![
+                piece(Buffer::Original, 0, 4, 0, None),
+                piece(Buffer::Append, 100, 104, 0, None),
+                piece(Buffer::Original, 4, 8, 0, None),
+            ]
+        );
+        assert_audit(&table);
+
+        let mut coarsened = Table::new(1, &cx);
+        coarsened.insert(&cx, 0, desc(Buffer::Original, 0, 4));
+        coarsened.insert(&cx, 4, desc(Buffer::Original, 4, 8));
+        coarsened.insert(&cx, 0, desc(Buffer::Append, 50, 52));
+        assert_eq!(
+            pieces(&coarsened, 0),
+            std::vec![
+                piece(Buffer::Append, 50, 52, 0, None),
+                piece(Buffer::Original, 0, 8, 0, None),
+            ]
+        );
+        assert_audit(&coarsened);
+
+        let mut next_cx = cx.clone();
+        let mut versioned = Table::new(2, &next_cx);
+        versioned.insert(&next_cx, 0, desc(Buffer::Original, 0, 4));
+        next_cx.version = version(1);
+        versioned.insert(&next_cx, 4, desc(Buffer::Original, 4, 8));
+        assert_eq!(
+            pieces(&versioned, 1),
+            std::vec![
+                piece(Buffer::Original, 0, 4, 0, None),
+                piece(Buffer::Original, 4, 8, 1, None),
+            ]
+        );
+        assert_audit(&versioned);
+    }
+
+    fn assert_removal_view(start: u64, end: u64, expected: &[Atom]) {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(0xBEEF, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 10));
+        cx.version = version(1);
+        table.remove(&cx, start, end);
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 10));
+        assert_view(&table, 1, expected);
+    }
+
+    #[test]
+    fn removal_offsets() {
+        // at prefix
+        assert_removal_view(0, 3, &atoms(Buffer::Original, 3, 10));
+
+        // at middle
+        let mut expected = atoms(Buffer::Original, 0, 3);
+        expected.extend(atoms(Buffer::Original, 7, 10));
+        assert_removal_view(3, 7, &expected);
+
+        // at suffix
+        assert_removal_view(7, 10, &atoms(Buffer::Original, 0, 7));
+
+        // all
+        assert_removal_view(0, 10, &[]);
+    }
+
+    #[test]
+    fn removal_lifetimes() {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(0xBEEF, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 10));
+        cx.version = version(1);
+        table.remove(&cx, 3, 7);
+
+        assert_eq!(
+            pieces(&table, 0),
+            std::vec![
+                piece(Buffer::Original, 0, 3, 0, None),
+                piece(Buffer::Original, 3, 7, 0, Some(1)),
+                piece(Buffer::Original, 7, 10, 0, None),
+            ]
+        );
+        assert_eq!(
+            pieces(&table, 1),
+            std::vec![
+                piece(Buffer::Original, 0, 3, 0, None),
+                piece(Buffer::Original, 7, 10, 0, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn visible_len_of_removed() {
+        let mut cx = context(0, 2);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 1));
+        cx.version = version(1);
+        table.remove(&cx, 0, 1);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn postremoval_edit_offsets() {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(7, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 10));
+
+        cx.version = version(1);
+        table.remove(&cx, 3, 7);
+        table.insert(&cx, 3, desc(Buffer::Append, 100, 102));
+
+        let mut expected = atoms(Buffer::Original, 0, 3);
+        expected.extend(atoms(Buffer::Append, 100, 102));
+        expected.extend(atoms(Buffer::Original, 7, 10));
+        assert_view(&table, 1, &expected);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn iter_skip_futures() {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 2));
+        cx.version = version(1);
+        table.insert(&cx, 2, desc(Buffer::Append, 10, 11));
+
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 2));
+    }
+
+    #[test]
+    fn rewind_and_branch() {
+        let mut cx = context(0, 8);
+        let mut table = Table::new(0x1234, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 6));
+
+        cx.version = version(1);
+        table.remove(&cx, 2, 4);
+
+        cx.version = version(2);
+        table.insert(&cx, 4, desc(Buffer::Append, 100, 102));
+
+        cx.version = version(0);
+        table.update(&cx);
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 6));
+        table.insert(&cx, 1, desc(Buffer::Append, 200, 201));
+
+        let mut branched = atoms(Buffer::Original, 0, 1);
+        branched.extend(atoms(Buffer::Append, 200, 201));
+        branched.extend(atoms(Buffer::Original, 1, 6));
+        assert_view(&table, 0, &branched);
+
+        cx.version = version(2);
+        table.update(&cx);
+        assert_view(&table, 2, &branched);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn undo_prune() {
+        let mut cx = context(0, 2);
+        let mut table = Table::new(9, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 4));
+
+        cx.version = version(1);
+        table.remove(&cx, 1, 2);
+        cx.version = version(2);
+        table.update(&cx);
+        cx.version = version(3);
+        table.insert(&cx, 0, desc(Buffer::Append, 20, 21));
+
+        cx.version = version(2);
+        table.update(&cx);
+        let mut at_two = atoms(Buffer::Original, 0, 1);
+        at_two.extend(atoms(Buffer::Original, 2, 4));
+        assert_view(&table, 2, &at_two);
+
+        cx.version = version(1);
+        table.update(&cx);
+        assert_view(&table, 1, &[]);
+
+        cx.undo_max_len = NonZero::new(8).expect("nonzero");
+        cx.version = version(0);
+        table.update(&cx);
+        assert_view(&table, 0, &[]);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn split_preserve_old_views() {
+        let mut cx = context(0, 8);
+        let mut table = Table::new(0xDEAD, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 8));
+        cx.version = version(1);
+        table.insert(&cx, 8, desc(Buffer::Append, 100, 102));
+
+        let right = table.split_off(&cx, 3);
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 3));
+        assert_view(&table, 1, &atoms(Buffer::Original, 0, 3));
+
+        assert_view(&right, 0, &atoms(Buffer::Original, 3, 8));
+        let mut right_at_one = atoms(Buffer::Original, 3, 8);
+        right_at_one.extend(atoms(Buffer::Append, 100, 102));
+        assert_view(&right, 1, &right_at_one);
+
+        assert_audit(&table);
+        assert_audit(&right);
+    }
+
+    #[test]
+    fn split_independent_results() {
+        let mut cx = context(0, 8);
+        let mut left = Table::new(0xDEAD, &cx);
+        left.insert(&cx, 0, desc(Buffer::Original, 0, 8));
+        let mut right = left.split_off(&cx, 3);
+
+        cx.version = version(1);
+        left.insert(&cx, 0, desc(Buffer::Append, 200, 201));
+        assert_view(&right, 1, &atoms(Buffer::Original, 3, 8));
+
+        right.insert(&cx, 5, desc(Buffer::Append, 300, 301));
+        let mut expected_left = atoms(Buffer::Append, 200, 201);
+        expected_left.extend(atoms(Buffer::Original, 0, 3));
+        assert_view(&left, 1, &expected_left);
+
+        assert_audit(&left);
+        assert_audit(&right);
+    }
+
+    #[test]
+    fn split_bounds_for_salts() {
+        for &salt in &[0, 1, 0xCAFE, usize::MAX] {
+            let cx = context(0, 4);
+            let mut whole = Table::new(salt, &cx);
+            whole.insert(&cx, 0, desc(Buffer::Original, 0, 6));
+
+            let returned = whole.split_off(&cx, 0);
+            assert_view(&whole, 0, &[]);
+            assert_view(&returned, 0, &atoms(Buffer::Original, 0, 6));
+            assert_audit(&whole);
+            assert_audit(&returned);
+
+            let mut kept = returned;
+            let empty = kept.split_off(&cx, 6);
+            assert_view(&kept, 0, &atoms(Buffer::Original, 0, 6));
+            assert_view(&empty, 0, &[]);
+            assert_audit(&kept);
+            assert_audit(&empty);
+
+            let mut boundary = Table::new(salt, &cx);
+            boundary.insert(&cx, 0, desc(Buffer::Original, 0, 3));
+            boundary.insert(&cx, 3, desc(Buffer::Append, 20, 22));
+            let right = boundary.split_off(&cx, 3);
+            assert_view(&boundary, 0, &atoms(Buffer::Original, 0, 3));
+            assert_view(&right, 0, &atoms(Buffer::Append, 20, 22));
+            assert_audit(&boundary);
+            assert_audit(&right);
+        }
+    }
+
+    #[test]
+    fn split_tombstone_offsets() {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 6));
+        cx.version = version(1);
+        table.remove(&cx, 2, 4);
+
+        let right = table.split_off(&cx, 3);
+        let mut lhs = atoms(Buffer::Original, 0, 2);
+        lhs.extend(atoms(Buffer::Original, 4, 5));
+        assert_view(&table, 1, &lhs);
+        assert_view(&right, 1, &atoms(Buffer::Original, 5, 6));
+        assert_audit(&table);
+        assert_audit(&right);
+    }
+
+    #[test]
+    #[should_panic]
+    fn insert_invalid_desc() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 2, 1));
+    }
+
+    #[test]
+    #[should_panic]
+    fn insert_out_of_bounds() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 1, desc(Buffer::Original, 0, 1));
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_invalid_range() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        table.remove(&cx, 1, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_out_of_bounds() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        table.remove(&cx, 0, 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn split_out_of_bounds() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        _ = table.split_off(&cx, 1);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn match_models(
+            salt in any::<usize>(),
+            undo_max_len in 1u32..=8,
+            ops in vec(arb_op(), 1..=128),
+        ) {
+            let mut cx = context(0, undo_max_len);
+            let mut table = Table::new(salt, &cx);
+            let mut model = Model::new(undo_max_len);
+
+            for (step, op) in ops.into_iter().enumerate() {
+                match op {
+                    Op::Insert { off, append, len } => {
+                        let total = model.current_view().len();
+                        let off = usize::from(off) % (total + 1);
+                        let buffer = if append { Buffer::Append } else { Buffer::Original };
+                        let start = (step as u64) * 16;
+                        let end = start + u64::from(len);
+                        let inserted = atoms(buffer, start, end);
+
+                        table.insert(&cx, off as u64, desc(buffer, start, end));
+                        model.insert(off, &inserted);
+                    }
+                    Op::Remove { a, b } => {
+                        let total = model.current_view().len();
+                        let a = usize::from(a) % (total + 1);
+                        let b = usize::from(b) % (total + 1);
+                        let start = a.min(b);
+                        let end = a.max(b);
+
+                        table.remove(&cx, start as u64, end as u64);
+                        model.remove(start, end);
+                    }
+                    Op::SwitchVersion { version: raw } => {
+                        let floor = model.minimum_query_version();
+                        let target = floor + u32::from(raw) % (17 - floor);
+                        cx.version = version(target);
+                        table.update(&cx);
+                        model.switch_to(target);
+                    }
+                    Op::Split { off, keep_right } => {
+                        let total = model.current_view().len();
+                        let off = usize::from(off) % (total + 1);
+                        let mut rhs = table.split_off(&cx, off as u64);
+                        let (expected_lhs, expected_rhs) = model.split(off, keep_right);
+
+                        prop_assert_eq!(flatten(&table, cx.version), expected_lhs);
+                        prop_assert_eq!(flatten(&rhs, cx.version), expected_rhs);
+                        audit(&table)?;
+                        audit(&rhs)?;
+
+                        if keep_right {
+                            core::mem::swap(&mut table, &mut rhs);
+                        }
+                    }
+                }
+
+                assert_model(&table, &model)?;
+                audit(&table)?;
+            }
+        }
+    }
+}
