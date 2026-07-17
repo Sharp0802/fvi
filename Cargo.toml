@@ -15,7 +15,6 @@ fvi-ui = { path = "crates/ui" }
 
 # logging
 tracing = "0.1"
-tracing-appender = "0.2"
 tracing-subscriber = "0.3"
 
 # graphics
