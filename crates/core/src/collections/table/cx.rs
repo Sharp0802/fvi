@@ -16,7 +16,7 @@ impl Context {
     /// Returns the possible oldest version constant.
     #[must_use]
     pub fn possible_oldest(&self) -> Version {
-        let raw = self.version.get().saturating_sub(self.undo_max_len.get());
+        let raw = (u32::from(self.version) + 1).saturating_sub(self.undo_max_len.get());
         Version::new(raw).unwrap_or_else(|| unreachable())
     }
 }

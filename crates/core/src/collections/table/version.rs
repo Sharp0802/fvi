@@ -1,5 +1,4 @@
 use core::num::NonZero;
-use core::ops::{Deref, DerefMut};
 
 /// A version constant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,22 +17,18 @@ impl Version {
     }
 }
 
-impl Deref for Version {
-    type Target = NonZero<u32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Version {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl From<Version> for u32 {
     fn from(value: Version) -> Self {
         value.0.get().wrapping_sub(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exhaustive() {
+        assert!(Version::new(u32::MAX).is_none());
     }
 }
