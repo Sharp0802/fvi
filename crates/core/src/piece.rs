@@ -74,8 +74,10 @@ impl Piece {
         }
     }
 
+    // cannot be `pub`, since it assumes
+    // current version as most recent version.
     #[must_use]
-    pub(super) fn len(&self) -> u64 {
+    pub(super) const fn len(&self) -> u64 {
         if self.del_at.is_some() {
             0
         } else {
