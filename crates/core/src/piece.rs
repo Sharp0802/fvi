@@ -74,6 +74,15 @@ impl Piece {
         }
     }
 
+    #[must_use]
+    pub(super) fn len(&self) -> u64 {
+        if self.del_at.is_some() {
+            0
+        } else {
+            self.desc().len()
+        }
+    }
+
     /// Returns whether this [`Piece`] is visible at given version.
     #[must_use]
     pub fn is_visible_at(&self, version: Version) -> bool {

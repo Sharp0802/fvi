@@ -51,7 +51,7 @@ impl Table {
             len
         } else {
             let lhs = self.len_of(t.lhs);
-            let mid = t.val.desc().len();
+            let mid = t.val.len();
             let rhs = self.len_of(t.rhs);
 
             let len = lhs + mid + rhs;
@@ -227,12 +227,10 @@ impl Table {
             return (NIL, NIL);
         };
 
-        debug_assert!(root_v.val.del_at.is_none(), "cannot split removed node");
-
         // must be at latest version!
         // or node length will be mismatched.
         let lhs_len = self.len_of(root_v.lhs);
-        let mid_len = root_v.val.desc().len();
+        let mid_len = root_v.val.len();
 
         if pos <= lhs_len {
             // pos is on lhs
@@ -251,9 +249,8 @@ impl Table {
                 self.invalidate(root);
 
                 self.reset_prv(a, NIL);
-                self.reset_prv(b, NIL);
                 let rhs = self.merge(b, root);
-                //self.reset_prv(rhs, NIL);
+                self.reset_prv(rhs, NIL);
 
                 (a, rhs)
             }
