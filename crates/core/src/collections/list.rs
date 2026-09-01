@@ -267,6 +267,22 @@ mod tests {
     use proptest::test_runner::TestCaseResult;
     use std::vec;
 
+    #[test]
+    fn exhaustive() {
+        let mut list: List<u32> = List::default();
+        assert_eq!(list, List::new());
+
+        assert!(list.get(0).is_none());
+        let i = list.push(0);
+        assert_eq!(*list.get(i).unwrap(), list[i]);
+
+        #[expect(clippy::ref_as_ptr, reason = "for test")]
+        let get_mut = list.get_mut(i).unwrap() as *mut u32;
+        #[expect(clippy::borrow_as_ptr, reason = "for test")]
+        let index_mut = (&mut list[i]) as *mut u32;
+        assert_eq!(get_mut, index_mut);
+    }
+
     #[derive(Debug, Clone)]
     enum Op {
         Push(i32),
