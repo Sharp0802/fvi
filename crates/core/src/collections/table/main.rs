@@ -1126,6 +1126,106 @@ mod tests {
     }
 
     #[test]
+    fn no_resurrection() {
+        let mut cx = context(0, 2);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 4));
+
+        cx.version = version(3);
+        table.update(&cx);
+        // Rewind directly below the retained boundary, without an intervening prune.
+        cx.version = version(1);
+        table.update(&cx);
+        assert_view(&table, 1, &[]);
+
+        table.insert(&cx, 0, desc(Buffer::Append, 10, 11));
+        assert_view(&table, 1, &atoms(Buffer::Append, 10, 11));
+        cx.version = version(3);
+        table.update(&cx);
+        assert_view(&table, 3, &atoms(Buffer::Append, 10, 11));
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn things_after_rewind() {
+        let mut cx = context(0, 2);
+        let mut table = Table::new(0xCAFE, &cx);
+        for i in 0..64 {
+            table.insert(&cx, i, desc(Buffer::Original, i * 2, i * 2 + 1));
+        }
+        cx.version = version(1);
+        table.remove(&cx, 2, 62);
+        cx.version = version(5);
+        table.update(&cx);
+        let capacity = table.slab.capacity();
+
+        // Clear a tree containing both live and deleted pieces.
+        cx.version = version(2);
+        table.update(&cx);
+        assert!(table.slab.is_empty());
+        assert_eq!(table.root, NIL);
+        assert_eq!(table.slab.capacity(), capacity);
+        assert_eq!(table.salt, 0xCAFE);
+        assert_audit(&table);
+
+        table.insert(&cx, 0, desc(Buffer::Append, 100, 101));
+        cx.version = version(3);
+        table.insert(&cx, 1, desc(Buffer::Append, 200, 201));
+        // The new branch can rewind below the previous history boundary.
+        cx.version = version(2);
+        table.update(&cx);
+        assert_view(&table, 2, &atoms(Buffer::Append, 100, 101));
+        assert_eq!(table.slab.capacity(), capacity);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn reclaim_oldest() {
+        let mut cx = context(0, 2);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 1));
+        cx.version = version(1);
+        table.remove(&cx, 0, 1);
+
+        // The deleted piece is still needed by retained version 0.
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 1));
+        assert_eq!(table.slab.len(), 1);
+
+        cx.version = version(2);
+        table.update(&cx);
+        assert_eq!(table.state.oldest, version(1));
+        assert_view(&table, 1, &[]);
+        assert!(
+            table.slab.is_empty(),
+            "deletion at oldest is already invisible"
+        );
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn shrink_undo_window() {
+        let mut cx = context(0, 8);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 1));
+        cx.version = version(1);
+        table.remove(&cx, 0, 1);
+        cx.version = version(3);
+        table.update(&cx);
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 1));
+        assert_eq!(table.slab.len(), 1);
+
+        cx.undo_max_len = NonZero::new(2).expect("nonzero");
+        table.update(&cx);
+        assert_eq!(table.state.latest, version(3));
+        assert_eq!(table.state.oldest, version(2));
+        assert!(
+            table.slab.is_empty(),
+            "window reduction must reclaim expired nodes"
+        );
+        assert_audit(&table);
+    }
+
+    #[test]
     fn split_preserve_old_views() {
         let mut cx = context(0, 8);
         let mut table = Table::new(0xDEAD, &cx);
@@ -1322,6 +1422,88 @@ mod tests {
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn rewind_before_history(
+            salt in any::<usize>(),
+            undo_max_len in 1u32..=8,
+            latest in 8u32..=64,
+            rewind_selector in any::<u8>(),
+            len in 1u64..=64,
+        ) {
+            let mut cx = context(0, undo_max_len);
+            let mut table = Table::new(salt, &cx);
+            table.insert(&cx, 0, desc(Buffer::Original, 0, len));
+            let capacity = table.slab.capacity();
+
+            cx.version = version(latest);
+            table.update(&cx);
+            let oldest = (latest + 1) - undo_max_len;
+            // Check the inclusive boundary on a clone so the original is not pruned.
+            let mut boundary = table.clone();
+            boundary.update(&context(oldest, undo_max_len));
+            prop_assert_eq!(flatten(&boundary, version(oldest)), atoms(Buffer::Original, 0, len));
+            audit(&boundary)?;
+
+            let rewind = u32::from(rewind_selector) % oldest;
+            cx.version = version(rewind);
+            table.update(&cx);
+            prop_assert!(flatten(&table, cx.version).is_empty());
+            let root = table.root;
+            prop_assert_eq!(table.len_of(root), 0, "hidden old text still contributes to editing offsets");
+            prop_assert!(table.slab.is_empty(), "discarded history still occupies nodes");
+            prop_assert_eq!(table.state.oldest, cx.version);
+            prop_assert_eq!(table.state.latest, cx.version);
+            prop_assert_eq!(table.slab.capacity(), capacity);
+            prop_assert_eq!(table.salt, salt);
+            audit(&table)?;
+
+            table.insert(&cx, 0, desc(Buffer::Append, 100, 101));
+            cx.version = version(latest);
+            table.update(&cx);
+            prop_assert_eq!(flatten(&table, cx.version), atoms(Buffer::Append, 100, 101));
+            audit(&table)?;
+        }
+
+        #[test]
+        fn forward_edit(
+            salt in any::<usize>(),
+            undo_max_len in 1u32..=8,
+            cycles in 32u32..=128,
+        ) {
+            let mut cx = context(0, undo_max_len);
+            let mut table = Table::new(salt, &cx);
+            // Keep one permanent piece while other pieces enter and leave history.
+            table.insert(&cx, 0, desc(Buffer::Original, 0, 1));
+            for cycle in 1..=cycles {
+                let inserted_at = cycle * 2 - 1;
+                let start = u64::from(inserted_at) * 2;
+                cx.version = version(inserted_at);
+                table.insert(&cx, 1, desc(Buffer::Append, start, start + 1));
+                cx.version = version(cycle * 2);
+                table.remove(&cx, 1, 2);
+            }
+
+            let oldest = (cycles * 2 + 1) - undo_max_len;
+            for at in oldest..=(cycles * 2) {
+                let mut expected = atoms(Buffer::Original, 0, 1);
+                if at % 2 == 1 {
+                    let start = u64::from(at) * 2;
+                    expected.extend(atoms(Buffer::Append, start, start + 1));
+                }
+                prop_assert_eq!(flatten(&table, version(at)), expected);
+            }
+            audit(&table)?;
+
+            // Deletions occur at even versions. Only those after oldest are needed.
+            let retained_deletions = cycles - oldest / 2;
+            let max_nodes = usize::try_from(1 + retained_deletions).expect("small generated bound");
+            prop_assert!(
+                table.slab.len() <= max_nodes,
+                "{} occupied nodes after {} cycles; retained history needs at most {}",
+                table.slab.len(), cycles, max_nodes,
+            );
+        }
 
         #[test]
         fn iter_large_history(
