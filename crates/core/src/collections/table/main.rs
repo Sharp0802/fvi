@@ -385,36 +385,14 @@ impl Table {
     }
 
     #[must_use]
-    fn leftmost_visible(&self, root: usize, version: Version) -> usize {
-        let mut lm = self.leftmost(root);
+    fn first_visible(&self, version: Version) -> usize {
+        let first = self.leftmost(self.root);
 
-        while let Some(&lm_v) = self.slab.get(lm) {
-            if lm_v.val.is_visible_at(version) {
-                return lm;
-            }
-
-            if lm_v.rhs != NIL {
-                let rhs_lm = self.leftmost_visible(lm_v.rhs, version);
-                if rhs_lm != NIL {
-                    return rhs_lm;
-                }
-            }
-
-            let mut prv = lm_v.prv;
-
-            while let Some(prv_v) = self.slab.get(prv) {
-                if prv_v.lhs == lm {
-                    break;
-                }
-
-                lm = prv;
-                prv = prv_v.prv;
-            }
-
-            lm = prv;
+        match self.slab.get(first) {
+            Some(node) if node.val.is_visible_at(version) => first,
+            Some(_) => self.next_visible(first, version),
+            None => NIL,
         }
-
-        NIL
     }
 
     #[must_use]
@@ -454,7 +432,7 @@ impl Table {
     /// Returns an iterator over pieces visible for given version.
     #[must_use]
     pub fn iter(&self, version: Version) -> Iter<'_> {
-        Iter::new(self, self.leftmost_visible(self.root, version), version)
+        Iter::new(self, self.first_visible(version), version)
     }
 
     /// Updates this [`Table`] to follow state of given context (`cx`).
