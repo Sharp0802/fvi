@@ -686,6 +686,14 @@ mod tests {
         prop_assert!(node.val.start < node.val.end, "empty node at {at}");
         if let Some(del_at) = node.val.del_at {
             prop_assert!(node.val.add_at <= del_at, "piece deleted before insertion");
+            prop_assert!(
+                del_at > table.state.oldest,
+                "expired deletion retained at node {at}"
+            );
+            prop_assert!(
+                table.deletions.contains(&(del_at, at)),
+                "unindexed deletion at node {at}"
+            );
         }
 
         for child in [node.lhs, node.rhs] {
@@ -720,6 +728,10 @@ mod tests {
     fn audit(table: &Table) -> TestCaseResult {
         if table.root == NIL {
             prop_assert_eq!(table.slab.len(), 0, "empty root leaked slab nodes");
+            prop_assert!(
+                table.deletions.is_empty(),
+                "empty table retained deletion entries"
+            );
             return Ok(());
         }
 
@@ -736,6 +748,19 @@ mod tests {
             table.slab.len(),
             "unreachable occupied slab node"
         );
+
+        for &(del_at, at) in &table.deletions {
+            prop_assert!(
+                table.slab.get(at).is_some(),
+                "deletion index references vacant node {at}"
+            );
+            prop_assert_eq!(
+                table.slab[at].val.del_at,
+                Some(del_at),
+                "stale deletion entry at node {}",
+                at
+            );
+        }
 
         let iter_len = flatten(table, table.state.latest).len() as u64;
         prop_assert_eq!(
@@ -1162,6 +1187,8 @@ mod tests {
         table.remove(&cx, 2, 62);
         cx.version = version(5);
         table.update(&cx);
+        table.remove(&cx, 1, 3);
+        assert!(!table.deletions.is_empty());
         let capacity = table.slab.capacity();
 
         // Clear a tree containing both live and deleted pieces.
@@ -1228,6 +1255,111 @@ mod tests {
             "window reduction must reclaim expired nodes"
         );
         assert_audit(&table);
+    }
+
+    #[test]
+    fn reclaim_reuses_slots() {
+        let cx = context(0, 1);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 1));
+        table.insert(&cx, 1, desc(Buffer::Append, 0, 1));
+        let capacity = table.slab.capacity();
+        table.remove(&cx, 1, 2);
+
+        for i in 1..=1024 {
+            // Even without a version advance, the deletion is already expired.
+            table.insert(&cx, 1, desc(Buffer::Append, i * 2, i * 2 + 1));
+            table.remove(&cx, 1, 2);
+            assert_eq!(table.slab.len(), 1);
+            assert!(table.deletions.is_empty());
+        }
+        assert_eq!(table.slab.capacity(), capacity);
+        assert_view(&table, 0, &atoms(Buffer::Original, 0, 1));
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn redelete_after_undo() {
+        let mut cx = context(0, 4);
+        let mut table = Table::new(0, &cx);
+        table.insert(&cx, 0, desc(Buffer::Original, 0, 3));
+        cx.version = version(2);
+        table.remove(&cx, 1, 2);
+        assert_eq!(table.deletions.len(), 1);
+
+        cx.version = version(1);
+        table.update(&cx);
+        assert!(table.deletions.is_empty());
+        assert_view(&table, 1, &atoms(Buffer::Original, 0, 3));
+        assert_audit(&table);
+
+        cx.version = version(3);
+        table.remove(&cx, 1, 2);
+        cx.version = version(5);
+        table.update(&cx);
+        // The old deletion date has expired, but the replacement deletion has not.
+        assert_eq!(table.state.oldest, version(2));
+        assert_eq!(table.deletions.len(), 1);
+        assert_view(&table, 2, &atoms(Buffer::Original, 0, 3));
+        let expected = [
+            Atom {
+                buffer: Buffer::Original,
+                offset: 0,
+            },
+            Atom {
+                buffer: Buffer::Original,
+                offset: 2,
+            },
+        ];
+        assert_view(&table, 5, &expected);
+        assert_audit(&table);
+
+        cx.version = version(6);
+        table.update(&cx);
+        assert!(table.deletions.is_empty());
+        assert_view(&table, 6, &expected);
+        assert_audit(&table);
+    }
+
+    #[test]
+    fn reclaim_after_clone_and_split() {
+        let mut cx = context(0, 4);
+        let mut left = Table::new(0, &cx);
+        left.insert(&cx, 0, desc(Buffer::Original, 0, 10));
+        cx.version = version(1);
+        left.remove(&cx, 2, 4);
+        left.remove(&cx, 4, 6);
+        assert_eq!(left.deletions.len(), 2);
+
+        let mut cloned = left.clone();
+        cloned.update(&context(4, 4));
+        assert!(cloned.deletions.is_empty());
+        assert_eq!(left.deletions.len(), 2);
+        assert_view(&left, 0, &atoms(Buffer::Original, 0, 10));
+        assert_audit(&cloned);
+
+        let mut right = left.split_off(&cx, 3);
+        assert_eq!(left.deletions.len(), 1);
+        assert_eq!(right.deletions.len(), 1);
+        assert_audit(&left);
+        assert_audit(&right);
+
+        cx.version = version(4);
+        left.update(&cx);
+        assert!(left.deletions.is_empty());
+        assert_eq!(right.deletions.len(), 1);
+        assert_view(&right, 0, &atoms(Buffer::Original, 5, 10));
+        right.update(&cx);
+        assert!(right.deletions.is_empty());
+
+        let mut expected_left = atoms(Buffer::Original, 0, 2);
+        expected_left.extend(atoms(Buffer::Original, 4, 5));
+        let mut expected_right = atoms(Buffer::Original, 5, 6);
+        expected_right.extend(atoms(Buffer::Original, 8, 10));
+        assert_view(&left, 4, &expected_left);
+        assert_view(&right, 4, &expected_right);
+        assert_audit(&left);
+        assert_audit(&right);
     }
 
     #[test]
