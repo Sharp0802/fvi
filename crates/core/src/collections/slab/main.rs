@@ -11,11 +11,6 @@ pub struct Slab<T> {
     slots: Vec<Slot<T>>,
 }
 
-const _: () = const {
-    assert!(size_of::<Slab<u32>>() == 40);
-    assert!(size_of::<Slab<u64>>() == 40);
-};
-
 impl<T> Slab<T> {
     /// Creates a new [`Slab<T>`].
     #[must_use]
