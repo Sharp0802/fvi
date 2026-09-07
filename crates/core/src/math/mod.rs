@@ -1,5 +1,5 @@
 //! A module for mathematical stuffs.
 
-mod xorshift;
+mod shuffle;
 
-pub use xorshift::*;
+pub use shuffle::*;
