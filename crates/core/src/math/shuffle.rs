@@ -1,48 +1,39 @@
-/// Do xorshift for [`u16`].
+/// Do keyed split-mix for 64-bit integer.
 #[must_use]
-pub const fn xorshift16(mut x: u16) -> u16 {
-    x ^= x << 7;
-    x ^= x >> 9;
-    x ^= x << 8;
+pub const fn shuffle64(mut x: u64, key: u64) -> u64 {
+    x = x.wrapping_add(key);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
     x
 }
 
-/// Do xorshift for [`u32`].
+/// Do keyed split-mix for 32-bit integer.
 #[must_use]
-pub const fn xorshift32(mut x: u32) -> u32 {
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
+pub const fn shuffle32(mut x: u32, key: u32) -> u32 {
+    x = x.wrapping_add(key);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x7FEB_352D);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x846C_A68B);
+    x ^= x >> 16;
     x
 }
 
-/// Do xorshift for [`u64`].
+/// Shuffles [`usize`] with key, using bijection function.
 #[must_use]
-pub const fn xorshift64(mut x: u64) -> u64 {
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    x
-}
-
-/// Do xorshift for [`usize`].
-#[must_use]
-pub const fn xorshift(x: usize) -> usize {
+pub const fn shuffle(x: usize, key: usize) -> usize {
     #![expect(clippy::cast_possible_truncation, reason = "pointer width checked")]
 
-    #[cfg(not(any(
-        target_pointer_width = "64",
-        target_pointer_width = "32",
-        target_pointer_width = "16"
-    )))]
+    #[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32",)))]
     compile_error!("unsupported target pointer width");
 
     #[cfg(target_pointer_width = "64")]
-    return xorshift64(x as u64) as usize;
+    return shuffle64(x as u64, key as u64) as usize;
     #[cfg(target_pointer_width = "32")]
-    return xorshift32(x as u32) as usize;
-    #[cfg(target_pointer_width = "16")]
-    return xorshift16(x as u16) as usize;
+    return shuffle32(x as u32, key as u32) as usize;
 }
 
 #[cfg(test)]
@@ -51,8 +42,7 @@ mod tests {
 
     #[test]
     fn exhaustive() {
-        _ = xorshift16(0);
-        _ = xorshift32(0);
-        _ = xorshift64(0);
+        _ = shuffle32(1, 0);
+        _ = shuffle64(1, 0);
     }
 }

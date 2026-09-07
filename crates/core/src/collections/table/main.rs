@@ -4,7 +4,7 @@ use crate::collections::Slab;
 use crate::collections::table::node::Node;
 use crate::collections::table::state::{State, Verdict};
 use crate::collections::table::{Context, Iter, NIL, Version};
-use crate::math::xorshift;
+use crate::math::shuffle;
 use crate::piece::PieceDesc;
 use crate::util::unreachable;
 
@@ -62,7 +62,7 @@ impl Table {
 
     #[must_use]
     const fn pri_of(&self, at: usize) -> usize {
-        xorshift(at ^ self.salt)
+        shuffle(at ^ self.salt, self.salt)
     }
 
     fn mark_removed(&mut self, at: usize, version: Version) {
@@ -564,9 +564,9 @@ impl Table {
 
         let len = self.len_of(self.root);
         if off == 0 {
-            core::mem::replace(self, Self::new(xorshift(self.salt), cx))
+            core::mem::replace(self, Self::new(shuffle(self.salt, self.salt), cx))
         } else if off == len {
-            Self::new(xorshift(self.salt), cx)
+            Self::new(shuffle(self.salt, self.salt), cx)
         } else if off < len {
             let (lhs, rhs) = self.split_unsafe(self.root, off);
             let mut cloned = self.clone();
