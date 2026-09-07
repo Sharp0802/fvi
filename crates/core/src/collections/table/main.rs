@@ -1,11 +1,12 @@
 use core::cmp::Ordering;
+use std::collections::BTreeSet;
 
 use crate::collections::Slab;
 use crate::collections::table::node::Node;
 use crate::collections::table::state::{State, Verdict};
 use crate::collections::table::{Context, Iter, NIL, Version};
 use crate::math::shuffle;
-use crate::piece::PieceDesc;
+use crate::piece::{Piece, PieceDesc};
 use crate::util::unreachable;
 
 macro_rules! debug_assert_dead_or_nil {
@@ -29,11 +30,29 @@ pub struct Table {
     state: State,
     root: usize,
     salt: usize,
+    dels: BTreeSet<(Version, usize)>,
     pub(super) slab: Slab<Node>,
 }
 
 // Node Accessors
 impl Table {
+    #[must_use]
+    fn insert_node(&mut self, piece: Piece) -> usize {
+        let at = self.slab.insert(piece.into());
+        if let Some(version) = piece.del_at {
+            _ = self.dels.insert((version, at));
+        }
+        at
+    }
+
+    fn remove_node(&mut self, at: usize) -> Option<Node> {
+        let node = self.slab.remove(at)?;
+        if let Some(version) = node.val.del_at {
+            _ = self.dels.remove(&(version, at));
+        }
+        Some(node)
+    }
+
     const fn invalidate(&mut self, mut at: usize) {
         while let Some(t) = self.slab.get_mut(at) {
             t.len = None;
@@ -76,6 +95,7 @@ impl Table {
         let node = &mut self.slab[at];
         if node.val.del_at.is_none() {
             node.val.del_at = Some(version);
+            _ = self.dels.insert((version, at));
         }
         node.len = None;
     }
@@ -90,7 +110,7 @@ impl Table {
 // Kill
 impl Table {
     fn kill_all_unsafe(&mut self, at: usize) {
-        let Some(t) = self.slab.remove(at) else {
+        let Some(t) = self.remove_node(at) else {
             return;
         };
 
@@ -136,8 +156,20 @@ impl Table {
             self.root = replace;
         }
 
-        let del = self.slab.remove(at);
+        let del = self.remove_node(at);
         debug_assert!(del.is_some());
+    }
+
+    fn reclaim_expired(&mut self) {
+        while let Some(&(version, at)) = self.dels.first() {
+            if version > self.state.oldest {
+                break;
+            }
+
+            // A piece deleted at oldest is invisible throughout retained history.
+            debug_assert_eq!(self.slab[at].val.del_at, Some(version));
+            self.kill(at);
+        }
     }
 
     fn prune(&mut self) {
@@ -154,7 +186,9 @@ impl Table {
                     self.kill(cur);
                 }
                 Verdict::Revive => {
-                    self.slab[cur].val.del_at = None;
+                    if let Some(version) = self.slab[cur].val.del_at.take() {
+                        _ = self.dels.remove(&(version, cur));
+                    }
                     self.invalidate(cur);
                 }
             }
@@ -213,7 +247,7 @@ impl Table {
             self.slab[a_rhs_i].val = coarsen;
             self.invalidate(a_rhs_i);
 
-            let rem = self.slab.remove(b_first);
+            let rem = self.remove_node(b_first);
             debug_assert!(rem.is_some());
 
             self.merge(a, b_rest)
@@ -266,7 +300,7 @@ impl Table {
                 self.invalidate(root);
 
                 self.reset_prv(root_v.lhs, NIL);
-                let mid_lhs = self.slab.insert(mid_l.into());
+                let mid_lhs = self.insert_node(mid_l);
                 let new_lhs = self.merge(root_v.lhs, mid_lhs);
 
                 (new_lhs, root)
@@ -425,6 +459,7 @@ impl Table {
             state: State::new(cx),
             root: NIL,
             salt,
+            dels: BTreeSet::new(),
             slab: Slab::new(),
         }
     }
@@ -436,6 +471,10 @@ impl Table {
     }
 
     /// Updates this [`Table`] to follow state of given context (`cx`).
+    ///
+    /// Reclaims deleted pieces that are no longer visible in retained history,
+    /// including when the undo window shrinks without changing the version.
+    /// Expired pieces are located through an index of deletion versions.
     ///
     /// Rewinding within retained history scans the nodes to discard later edits.
     ///
@@ -452,6 +491,7 @@ impl Table {
         if self.state.update(cx) {
             self.prune();
         }
+        self.reclaim_expired();
     }
 
     /// Inserts given descriptor at specified offset to this [`Table`].
@@ -476,12 +516,15 @@ impl Table {
         }
 
         let (lhs, rhs) = self.split_unsafe(self.root, off);
-        let mid = self.slab.insert(desc.build(cx.version).into());
+        let mid = self.insert_node(desc.build(cx.version));
         let tmp = self.concat(lhs, mid);
         self.root = self.concat(tmp, rhs);
     }
 
     /// Marks given range as removed from this [`Table`].
+    ///
+    /// Deleted pieces that are already outside retained history are reclaimed
+    /// before this method returns.
     ///
     /// Rewinding the version can cause iterating all nodes.
     /// See [`Table::update()`].
@@ -530,6 +573,7 @@ impl Table {
                 unreachable();
             }
         }
+        self.reclaim_expired();
     }
 
     /// Splits this [`Table`] at given offset.
@@ -691,7 +735,7 @@ mod tests {
                 "expired deletion retained at node {at}"
             );
             prop_assert!(
-                table.deletions.contains(&(del_at, at)),
+                table.dels.contains(&(del_at, at)),
                 "unindexed deletion at node {at}"
             );
         }
@@ -729,7 +773,7 @@ mod tests {
         if table.root == NIL {
             prop_assert_eq!(table.slab.len(), 0, "empty root leaked slab nodes");
             prop_assert!(
-                table.deletions.is_empty(),
+                table.dels.is_empty(),
                 "empty table retained deletion entries"
             );
             return Ok(());
@@ -749,7 +793,7 @@ mod tests {
             "unreachable occupied slab node"
         );
 
-        for &(del_at, at) in &table.deletions {
+        for &(del_at, at) in &table.dels {
             prop_assert!(
                 table.slab.get(at).is_some(),
                 "deletion index references vacant node {at}"
@@ -1188,7 +1232,7 @@ mod tests {
         cx.version = version(5);
         table.update(&cx);
         table.remove(&cx, 1, 3);
-        assert!(!table.deletions.is_empty());
+        assert!(!table.dels.is_empty());
         let capacity = table.slab.capacity();
 
         // Clear a tree containing both live and deleted pieces.
@@ -1271,7 +1315,7 @@ mod tests {
             table.insert(&cx, 1, desc(Buffer::Append, i * 2, i * 2 + 1));
             table.remove(&cx, 1, 2);
             assert_eq!(table.slab.len(), 1);
-            assert!(table.deletions.is_empty());
+            assert!(table.dels.is_empty());
         }
         assert_eq!(table.slab.capacity(), capacity);
         assert_view(&table, 0, &atoms(Buffer::Original, 0, 1));
@@ -1285,11 +1329,11 @@ mod tests {
         table.insert(&cx, 0, desc(Buffer::Original, 0, 3));
         cx.version = version(2);
         table.remove(&cx, 1, 2);
-        assert_eq!(table.deletions.len(), 1);
+        assert_eq!(table.dels.len(), 1);
 
         cx.version = version(1);
         table.update(&cx);
-        assert!(table.deletions.is_empty());
+        assert!(table.dels.is_empty());
         assert_view(&table, 1, &atoms(Buffer::Original, 0, 3));
         assert_audit(&table);
 
@@ -1299,7 +1343,7 @@ mod tests {
         table.update(&cx);
         // The old deletion date has expired, but the replacement deletion has not.
         assert_eq!(table.state.oldest, version(2));
-        assert_eq!(table.deletions.len(), 1);
+        assert_eq!(table.dels.len(), 1);
         assert_view(&table, 2, &atoms(Buffer::Original, 0, 3));
         let expected = [
             Atom {
@@ -1316,7 +1360,7 @@ mod tests {
 
         cx.version = version(6);
         table.update(&cx);
-        assert!(table.deletions.is_empty());
+        assert!(table.dels.is_empty());
         assert_view(&table, 6, &expected);
         assert_audit(&table);
     }
@@ -1329,28 +1373,28 @@ mod tests {
         cx.version = version(1);
         left.remove(&cx, 2, 4);
         left.remove(&cx, 4, 6);
-        assert_eq!(left.deletions.len(), 2);
+        assert_eq!(left.dels.len(), 2);
 
         let mut cloned = left.clone();
         cloned.update(&context(4, 4));
-        assert!(cloned.deletions.is_empty());
-        assert_eq!(left.deletions.len(), 2);
+        assert!(cloned.dels.is_empty());
+        assert_eq!(left.dels.len(), 2);
         assert_view(&left, 0, &atoms(Buffer::Original, 0, 10));
         assert_audit(&cloned);
 
         let mut right = left.split_off(&cx, 3);
-        assert_eq!(left.deletions.len(), 1);
-        assert_eq!(right.deletions.len(), 1);
+        assert_eq!(left.dels.len(), 1);
+        assert_eq!(right.dels.len(), 1);
         assert_audit(&left);
         assert_audit(&right);
 
         cx.version = version(4);
         left.update(&cx);
-        assert!(left.deletions.is_empty());
-        assert_eq!(right.deletions.len(), 1);
+        assert!(left.dels.is_empty());
+        assert_eq!(right.dels.len(), 1);
         assert_view(&right, 0, &atoms(Buffer::Original, 5, 10));
         right.update(&cx);
-        assert!(right.deletions.is_empty());
+        assert!(right.dels.is_empty());
 
         let mut expected_left = atoms(Buffer::Original, 0, 2);
         expected_left.extend(atoms(Buffer::Original, 4, 5));

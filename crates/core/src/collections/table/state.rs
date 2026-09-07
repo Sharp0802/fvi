@@ -35,7 +35,7 @@ impl State {
 
     #[must_use]
     pub fn verdict(&self, piece: &Piece) -> Verdict {
-        if piece.del_at.is_some_and(|t| t < self.oldest) || self.latest < piece.add_at {
+        if piece.del_at.is_some_and(|t| t <= self.oldest) || self.latest < piece.add_at {
             Verdict::Kill
         } else if piece.del_at.is_some_and(|t| t > self.latest) {
             Verdict::Revive
