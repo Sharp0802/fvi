@@ -876,6 +876,27 @@ mod tests {
         Ok(())
     }
 
+    fn insert_fragmented(
+        table: &mut Table,
+        cx: &Context,
+        model: &mut Model,
+        count: usize,
+        buffer: Buffer,
+    ) {
+        for i in 0..count {
+            // Gaps prevent coarsening, so each insertion retains a separate node.
+            let start = (i as u64) * 2;
+            table.insert(cx, i as u64, desc(buffer, start, start + 1));
+            model.insert(
+                i,
+                &[Atom {
+                    buffer,
+                    offset: start,
+                }],
+            );
+        }
+    }
+
     fn arb_op() -> impl Strategy<Value = Op> {
         prop_oneof![
             5 => (any::<u16>(), any::<bool>(), 0u8..=8).prop_map(|(off, append, len)| {
@@ -1262,7 +1283,7 @@ mod tests {
         fn match_models(
             salt in any::<usize>(),
             undo_max_len in 1u32..=8,
-            ops in vec(arb_op(), 1..=128),
+            ops in vec(arb_op(), 1..=512),
         ) {
             let mut cx = context(0, undo_max_len);
             let mut table = Table::new(salt, &cx);
@@ -1318,6 +1339,62 @@ mod tests {
                 assert_model(&table, &model)?;
                 audit(&table)?;
             }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn iter_large_history(
+            salt in any::<usize>(),
+            piece_count in 1024usize..=4096,
+        ) {
+            let mut cx = context(0, 8);
+            let mut table = Table::new(salt, &cx);
+            let mut model = Model::new(8);
+
+            cx.version = version(1);
+            model.switch_to(1);
+            insert_fragmented(&mut table, &cx, &mut model, piece_count, Buffer::Original);
+            // Version 0 must skip a whole tree of future insertions.
+            assert_model(&table, &model)?;
+            audit(&table)?;
+
+            cx.version = version(2);
+            model.switch_to(2);
+            table.remove(&cx, 0, (piece_count - 1) as u64);
+            model.remove(0, piece_count - 1);
+            // Only the last original piece survives a long deleted prefix.
+            assert_model(&table, &model)?;
+            audit(&table)?;
+
+            cx.version = version(3);
+            model.switch_to(3);
+            insert_fragmented(&mut table, &cx, &mut model, piece_count, Buffer::Append);
+            // Historical views must also skip the newly inserted prefix.
+            assert_model(&table, &model)?;
+            audit(&table)?;
+
+            cx.version = version(4);
+            model.switch_to(4);
+            table.remove(&cx, 1, (piece_count + 1) as u64);
+            model.remove(1, piece_count + 1);
+            // Only the first appended piece survives a long deleted suffix.
+            assert_model(&table, &model)?;
+            audit(&table)?;
+
+            cx.version = version(5);
+            model.switch_to(5);
+            table.remove(&cx, 0, 1);
+            model.remove(0, 1);
+            // Nothing is visible now, but earlier snapshots remain readable.
+            assert_model(&table, &model)?;
+            audit(&table)?;
+
+            let mut iter = table.iter(cx.version);
+            prop_assert_eq!(iter.next(), None);
+            prop_assert_eq!(iter.next(), None);
         }
     }
 }
