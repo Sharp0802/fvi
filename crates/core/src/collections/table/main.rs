@@ -437,13 +437,18 @@ impl Table {
 
     /// Updates this [`Table`] to follow state of given context (`cx`).
     ///
-    /// It may attept to prune nodes by iterating in `O(n)`,
-    /// if given context (`cx`) requires rewind some of retained history
-    /// (that means the context has older version than latest version of this [`Table`]).
+    /// Rewinding within retained history scans the nodes to discard later edits.
     ///
-    /// It may clear this [`Table`] that specifying a version older than retained history.
-    /// Note that the allocated capacity isn't affected by clearing anyway.
+    /// A version older than retained history clears all pieces and starts an empty
+    /// history at that version. The salt and allocated capacity are preserved.
     pub fn update(&mut self, cx: &Context) {
+        if cx.version < self.state.oldest {
+            let root = core::mem::replace(&mut self.root, NIL);
+            self.kill_all_unsafe(root);
+            self.state = State::new(cx);
+            return;
+        }
+
         if self.state.update(cx) {
             self.prune();
         }
