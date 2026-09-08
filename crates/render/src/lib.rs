@@ -1,15 +1,20 @@
 #![doc = include_str!("../README.md")]
 
 mod backend;
-pub mod canvas;
-pub mod context;
-pub mod error;
-pub mod shape;
+mod canvas;
+mod context;
+mod error;
+mod id;
+mod shape;
 
-pub use canvas::{Canvas, Draw};
-pub use context::{DevicePref, RenderConfig, RenderContext, RenderDevice, RenderPref, SurfacePref};
-pub use error::{InitError, RenderError};
-pub use shape::{Id, Location, Rect, Shape, ShapeData};
+#[path = "gfx.g.rs"]
+mod gfx;
+
+pub use canvas::*;
+pub use context::*;
+pub use error::*;
+pub use id::*;
+pub use shape::*;
 
 macro_rules! label {
     ($name:literal) => {
