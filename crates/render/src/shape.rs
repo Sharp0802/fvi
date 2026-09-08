@@ -1,5 +1,3 @@
-//! Primitive data and identifiers, independent of GPU resource management.
-
 use bytemuck::{Pod, Zeroable};
 
 pub use crate::gfx::types::*;

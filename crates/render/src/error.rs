@@ -1,5 +1,3 @@
-//! A module for error types.
-
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
