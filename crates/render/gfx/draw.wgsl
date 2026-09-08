@@ -1,9 +1,5 @@
 #import types::Rect;
 
-struct DrawArgs {
-    scale: f32,
-};
-
 struct VertexOutput {
     @builtin(position) pos: vec4f,
     @location(1) @interpolate(flat) color: vec4f,
@@ -12,7 +8,7 @@ struct VertexOutput {
     @location(4) @interpolate(flat) radius: f32,
 };
 
-@group(0) @binding(0) var<uniform> args: DrawArgs;
+@group(0) @binding(0) var<uniform> scale: f32;
 @group(1) @binding(0) var<storage, read> rects: array<Rect>;
 @group(1) @binding(1) var<storage, read> visibles: array<u32>;
 
@@ -32,8 +28,8 @@ fn vs_main(
     let rect = rects[id];
 
     let uv = uvs[vertex];
-    let center = rect.center * args.scale;
-    let half_size = rect.halfsize * args.scale;
+    let center = rect.center * scale;
+    let half_size = rect.halfsize * scale;
     let pos = center + half_size * uv;
 
     var output: VertexOutput;
