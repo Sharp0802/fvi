@@ -1,10 +1,9 @@
 use std::num::NonZero;
 use wgpu::*;
 
-use super::{IndirectArgsBuffer, ShapeBuffer, ShapeBufferScope};
+use super::*;
+use crate::Id;
 use crate::id::IdMap;
-use crate::shape::Rect;
-use crate::{Id, Shape};
 
 #[derive(Debug)]
 pub struct RenderState<T> {

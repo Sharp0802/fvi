@@ -1,16 +1,17 @@
 #![doc = include_str!("../README.md")]
 
-pub mod backend;
+mod backend;
+mod canvas;
 mod context;
 mod error;
 mod id;
-mod shape;
 
 #[path = "gfx.g.rs"]
 mod gfx;
 
+pub use canvas::*;
 pub use error::*;
-pub use shape::*;
+pub use id::Id;
 
 macro_rules! label {
     ($fmt:literal $(, $arg:expr)*) => {

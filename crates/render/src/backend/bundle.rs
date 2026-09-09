@@ -2,8 +2,7 @@ use tracing::instrument;
 use wgpu::*;
 
 use super::*;
-use crate::shape::Rect;
-use crate::{Id, Shape};
+use crate::Id;
 
 macro_rules! decl_bundle {
     ($($name:ident),+ $(,)?) => {

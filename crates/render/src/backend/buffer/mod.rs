@@ -5,7 +5,7 @@ use tracing::{error, instrument};
 use wgpu::util::*;
 use wgpu::*;
 
-use crate::Shape;
+use super::*;
 
 mod bind;
 mod iter;

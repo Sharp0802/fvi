@@ -1,18 +1,16 @@
 use bytemuck::{Pod, Zeroable};
 use std::fmt::Debug;
 
-use crate::gfx::ShaderEntry;
+use super::*;
 pub use crate::gfx::types::*;
+use crate::{backend::RenderStateBundleScope, gfx::ShaderEntry};
 
 pub const BIT_VIS: u32 = 0x0000_0001;
 
 pub trait Shape: Debug + Zeroable + Pod {
     const CULL: ShaderEntry;
-    /// The shader entry for vertex shader.
     const VERTEX: ShaderEntry;
-    /// The shader entry for fragment shader.
     const FRAGMENT: ShaderEntry;
-    /// The maximum tick count for slot cache.
     const MAX_AGE: u32;
 
     fn is_visible(&self) -> bool;
@@ -37,4 +35,13 @@ impl Shape for Rect {
             self.mask &= !BIT_VIS;
         }
     }
+}
+
+pub trait Drawable {}
+
+impl<T> Drawable for T
+where
+    T: Shape,
+    for<'a> RenderStateBundleScope<'a>: AsMut<RenderStateScope<'a, T>>,
+{
 }

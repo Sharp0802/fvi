@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 use tracing::instrument;
 use wgpu::*;
 
-use super::{ArgsBuffer, IndirectArgsBuffer, RenderState, ShapeBuffer};
+use super::*;
 use crate::context::Shader;
-use crate::{Shape, label};
+use crate::label;
 
 #[derive(Debug)]
 pub struct Pipeline<T> {
