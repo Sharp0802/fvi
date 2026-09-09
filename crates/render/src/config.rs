@@ -1,4 +1,3 @@
-use std::num::NonZero;
 use wgpu::{Features, Limits, MemoryHints, TextureUsages};
 
 /// A configuration for the application.
@@ -15,8 +14,6 @@ pub struct RenderConfig {
     pub features: Features,
     /// The required texture usages.
     pub texture_usages: TextureUsages,
-    /// The number of layer to use.
-    pub layer_count: NonZero<u32>,
     /// The memory hints.
     pub memory_hints: MemoryHints,
 }
@@ -25,17 +22,13 @@ impl RenderConfig {
     /// Normalizes `self` to compatible with the `fvi`'s requirements.
     #[must_use]
     pub fn normalize(&self) -> Self {
-        let mut min = Self::default();
-        let layer_count = NonZero::new(self.limits.max_texture_array_layers)
-            .unwrap_or(NonZero::<u32>::MIN)
-            .max(self.layer_count);
-        min.limits.max_texture_array_layers = layer_count.get();
+        let min = Self::default();
+
         Self {
             debug: self.debug,
             limits: self.limits.clone().or_better_values_from(&min.limits),
             features: self.features | min.features,
             texture_usages: self.texture_usages | min.texture_usages,
-            layer_count,
             memory_hints: self.memory_hints.clone(),
         }
     }
@@ -51,7 +44,6 @@ impl Default for RenderConfig {
             },
             features: Features::empty(),
             texture_usages: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            layer_count: NonZero::<u32>::MIN,
             memory_hints: MemoryHints::default(),
         }
     }

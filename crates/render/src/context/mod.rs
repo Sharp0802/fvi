@@ -1,23 +1,22 @@
 //! A renewable rendering context.
 
+use std::fmt::Debug;
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 use wgpu::*;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::canvas::Canvas;
-use crate::error::{InitError, RenderError};
+use crate::config::*;
+use crate::{InitError, RenderError};
 
 mod adapter;
-mod config;
 mod device;
 mod shader;
 
 use adapter::list_adapters;
-pub use config::{DevicePref, RenderConfig, RenderPref, SurfacePref};
-pub use device::RenderDevice;
-pub use shader::Shader;
+use device::*;
+pub use shader::*;
 
 const BACKENDS: Backends = Backends::PRIMARY;
 
@@ -30,8 +29,8 @@ pub struct RenderContext {
     size: PhysicalSize<u32>,
     instance: Instance,
     surface: Surface<'static>,
-    /// A render device of context.
-    pub device: RenderDevice,
+    device: RenderDevice,
+    shader: Shader,
     format: TextureFormat,
 }
 
@@ -46,7 +45,7 @@ impl RenderContext {
     pub async fn new(
         window: Arc<Window>,
         pref: &RenderPref,
-        config: &RenderConfig,
+        config: RenderConfig,
     ) -> Result<Self, InitError> {
         let instance = Instance::new(InstanceDescriptor {
             backends: BACKENDS,
@@ -64,21 +63,21 @@ impl RenderContext {
 
         let surface = instance.create_surface(window.clone())?;
 
-        let device = RenderDevice::new(&instance, &surface, &pref.device, config).await?;
+        let device = RenderDevice::new(&instance, &surface, &pref.device, &config).await?;
+        let shader = Shader::new(&device);
 
         let cap = surface.get_capabilities(device.as_ref());
         let format = cap.formats[0];
 
-        let size = window.inner_size();
-
         let this = Self {
-            config: config.clone(),
+            config,
             pref: pref.clone(),
+            size: window.inner_size(),
             window,
-            size,
             instance,
             surface,
             device,
+            shader,
             format,
         };
 
@@ -255,16 +254,15 @@ impl RenderContext {
         Ok(Some((frame, configure)))
     }
 
-    /// Renders current state into surface.
+    /// Starts rendering phase, returning the contextual scope.
     ///
     /// # Errors
     ///
     /// This function will return an error if it cannot be rendered.
     /// See [`RenderError`] for details.
-    #[instrument]
-    pub async fn render(&mut self) -> Result<(), RenderError> {
+    pub async fn start(&mut self) -> Result<Option<RenderScope<'_>>, RenderError> {
         let Some((frame, configure)) = self.get_frame().await? else {
-            return Ok(());
+            return Ok(None);
         };
 
         let view = frame.texture.create_view(&TextureViewDescriptor {
@@ -279,17 +277,64 @@ impl RenderContext {
             array_layer_count: None,
         });
 
-        let mut canvas = Canvas::new(&self.device);
-        canvas.clear(&view, Color::GREEN);
-        let command = canvas.finish();
-        let queue: &Queue = self.device.as_ref();
-        queue.submit([command]);
-        queue.present(frame);
+        Ok(Some(RenderScope {
+            device: &self.device,
+            queue: self.device.as_ref(),
+            shader: &self.shader,
+            view,
+            frame,
+            configure,
+        }))
+    }
 
-        if configure {
+    /// Submits given state and renders onto surface.
+    pub fn done<I>(&self, state: Done<I>)
+    where
+        I: Iterator<Item = CommandBuffer>,
+    {
+        let queue: &Queue = self.device.as_ref();
+        queue.submit(state.ops);
+        queue.present(state.frame);
+
+        if state.configure {
             self.configure_surface();
         }
-
-        Ok(())
     }
+}
+
+/// A contextual render scope.
+#[derive(Debug)]
+pub struct RenderScope<'a> {
+    /// The current device.
+    pub device: &'a Device,
+    /// A queue corresponding to current device.
+    pub queue: &'a Queue,
+    /// The shader store.
+    pub shader: &'a Shader,
+    /// The current surface texture.
+    pub view: TextureView,
+    frame: SurfaceTexture,
+    configure: bool,
+}
+
+impl RenderScope<'_> {
+    /// Closes `self`, returning result state.
+    pub fn done<I>(self, ops: I) -> Done<I>
+    where
+        I: Iterator<Item = CommandBuffer>,
+    {
+        Done {
+            ops,
+            frame: self.frame,
+            configure: self.configure,
+        }
+    }
+}
+
+/// A result state from [`RenderScope`].
+#[derive(Debug)]
+pub struct Done<I> {
+    ops: I,
+    frame: SurfaceTexture,
+    configure: bool,
 }

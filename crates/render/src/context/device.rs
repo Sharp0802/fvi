@@ -8,7 +8,6 @@ use super::adapter::select_adapter;
 use super::{DevicePref, RenderConfig};
 use crate::error::InitError;
 
-/// A rendering device.
 #[derive(Debug)]
 pub struct RenderDevice {
     name: String,
@@ -62,7 +61,6 @@ impl RenderDevice {
         self.is_lost.load(Ordering::Relaxed)
     }
 
-    /// Returns the name of corresponding adapter.
     #[must_use]
     pub const fn name(&self) -> &str {
         self.name.as_str()

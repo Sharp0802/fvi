@@ -5,6 +5,7 @@ use crate::gfx::ShaderEntry;
 
 macro_rules! decl_shader {
     ($($name:ident),+ $(,)?) => {
+        /// A compiled shader store.
         #[derive(Debug)]
         #[allow(non_snake_case, reason = "for simplicity of macro")]
         pub struct Shader {
@@ -12,7 +13,7 @@ macro_rules! decl_shader {
         }
 
         impl Shader {
-            pub fn new(device: &Device) -> Self {
+            pub(crate) fn new(device: &Device) -> Self {
                 Self {
                     $($name: ShaderEntry::$name.create_shader_module_embed_source(device),)+
                 }

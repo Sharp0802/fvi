@@ -2,7 +2,8 @@
 
 mod backend;
 mod canvas;
-mod context;
+pub mod config;
+pub mod context;
 mod error;
 mod id;
 mod types;
