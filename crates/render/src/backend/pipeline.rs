@@ -8,7 +8,6 @@ use crate::context::Shader;
 use crate::id::IdMap;
 use crate::{Id, Shape, label};
 
-/// A pipeline of the specific shape type.
 #[derive(Debug)]
 pub struct Pipeline<T> {
     #[cfg(debug_assertions)]
@@ -19,7 +18,6 @@ pub struct Pipeline<T> {
 }
 
 impl<T: Shape> Pipeline<T> {
-    /// Creates a new [`Pipeline`].
     #[must_use]
     pub fn new(
         device: &Device,
@@ -102,7 +100,6 @@ impl<T: Shape> Pipeline<T> {
         }
     }
 
-    /// Records operations on an encoder.
     #[instrument]
     pub fn dispatch(
         &self,
@@ -166,27 +163,45 @@ impl<T: Shape> Pipeline<T> {
     }
 }
 
-/// A render state of specific shape type.
 #[derive(Debug)]
 pub struct RenderState<T> {
+    map: IdMap,
     buffer: ShapeBuffer<T>,
     indirect_args: IndirectArgsBuffer,
 }
 
 impl<T: Shape> RenderState<T> {
-    /// Creates a new [`RenderState`].
     #[must_use]
     pub fn new(device: &Device) -> Self {
         Self {
+            map: IdMap::new(const { NonZero::new(T::MAX_AGE).unwrap() }),
             buffer: ShapeBuffer::new(device),
             indirect_args: IndirectArgsBuffer::new(device),
         }
     }
 
-    /// Opens a mutable scope of `self`,
-    /// that must be finalized by calling [`ShapeBufferScope::close`].
     #[must_use]
-    pub const fn open(&mut self) -> ShapeBufferScope<'_, T> {
-        self.buffer.open()
+    pub const fn open(&mut self) -> RenderStateScope<'_, T> {
+        RenderStateScope {
+            map: &mut self.map,
+            inner: self.buffer.open(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RenderStateScope<'a, T: Shape> {
+    map: &'a mut IdMap,
+    inner: ShapeBufferScope<'a, T>,
+}
+
+impl<T: Shape> RenderStateScope<'_, T> {
+    pub fn write(&mut self, id: Id, shape: T) {
+        let index = self.map.map(id);
+        self.inner.write(index, shape);
+    }
+
+    pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
+        self.inner.close_unchecked(device, encoder);
     }
 }

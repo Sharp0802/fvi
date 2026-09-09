@@ -21,7 +21,6 @@ const CHUNK_BYTES: BufferAddress = 64 * 1024;
 
 const DEFAULT_CAPACITY: usize = 8192;
 
-/// A bindable buffer for the shape types.
 #[derive(Debug)]
 pub struct ShapeBuffer<T> {
     version: u32,
@@ -34,13 +33,11 @@ pub struct ShapeBuffer<T> {
 }
 
 impl<T: Shape> ShapeBuffer<T> {
-    /// Create a new [`ShapeBuffer`].
     #[must_use]
     pub fn new(device: &Device) -> Self {
         Self::with_capacity(device, const { NonZero::new(DEFAULT_CAPACITY).unwrap() })
     }
 
-    /// Create a new [`ShapeBuffer`] with capacity.
     #[must_use]
     pub fn with_capacity(device: &Device, capacity: NonZero<usize>) -> Self {
         const {
@@ -69,41 +66,35 @@ impl<T: Shape> ShapeBuffer<T> {
         }
     }
 
-    /// Opens a mutable scope for `self`,
-    /// that must be finalized by calling [`ShapeBufferScope::close`].
-    ///
-    /// See [`ShapeBufferScope::close`] for more details.
     #[must_use]
     pub const fn open(&mut self) -> ShapeBufferScope<'_, T> {
         ShapeBufferScope::new(self)
     }
 
-    /// Returns a set of [`BindGroup`] corresponding to `self`.
     #[must_use]
     pub const fn as_binding(&self) -> &ShapeBufferBindGroup<T> {
         &self.bind
     }
 
-    /// Returns a set of [`BindGroupLayout`] corresponding to `self`.
     #[must_use]
     pub const fn as_layout(&self) -> &ShapeBufferBindGroupLayout<T> {
         &self.layout
     }
 
-    fn write(&mut self, id: usize, shape: T) -> bool {
-        debug_assert!(shape.is_visible(), "setting dead rect at {id}");
+    fn write(&mut self, index: usize, shape: T) -> bool {
+        debug_assert!(shape.is_visible(), "setting dead rect at {index}");
 
-        if let Some(old) = self.host.get_mut(id) {
+        if let Some(old) = self.host.get_mut(index) {
             if bytes_of(old) != bytes_of(&shape) {
                 *old = shape;
-                self.delta.insert(id);
+                self.delta.insert(index);
             }
 
             false
         } else {
-            self.delta.insert(id);
+            self.delta.insert(index);
 
-            let diff = id - self.host.len() + 1;
+            let diff = index - self.host.len() + 1;
             self.host.reserve(diff);
             for _ in 1..diff {
                 self.host.push(T::zeroed());
@@ -147,7 +138,6 @@ impl<T: Shape> ShapeBuffer<T> {
     }
 }
 
-/// A mutable scope for [`ShapeBufferScope`].
 #[derive(Debug)]
 pub struct ShapeBufferScope<'a, T: Shape> {
     done: bool,
@@ -165,18 +155,12 @@ impl<'a, T: Shape> ShapeBufferScope<'a, T> {
         }
     }
 
-    /// Writes given shape at specified index,
-    /// enlarging internal buffer with zero when index out of range.
-    pub fn write(&mut self, id: usize, shape: T) {
-        self.realloc |= self.inner.write(id, shape);
+    pub fn write(&mut self, index: usize, shape: T) {
+        self.realloc |= self.inner.write(index, shape);
     }
 
-    /// Closes `self`.
-    ///
-    /// The specified encoder must be submitted before creating
-    /// new `ShapeBufferScope` to prevent memory leak.
     #[instrument]
-    pub fn close(mut self, device: &Device, encoder: &mut CommandEncoder) {
+    pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
         if self.realloc {
             self.inner.realloc_unchecked(device, encoder);
         }

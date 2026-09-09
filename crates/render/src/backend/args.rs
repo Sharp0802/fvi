@@ -72,11 +72,9 @@ macro_rules! decl_args {
 }
 
 decl_args! {
-    /// A common arguments passed to shaders.
     #[repr(C)]
     #[derive(Clone, Copy, Debug, PartialEq, Zeroable, Pod)]
     pub struct Args {
-        /// A render scale factor for `dp x scale = px`.
         pub scale: f32,
     }
 }
@@ -93,7 +91,6 @@ impl Args {
     }
 }
 
-/// A bindable buffer for [`Args`].
 #[derive(Debug)]
 pub struct ArgsBuffer {
     cache: Args,
@@ -103,7 +100,6 @@ pub struct ArgsBuffer {
 }
 
 impl ArgsBuffer {
-    /// Creates a new [`ArgsBuffer`].
     #[must_use]
     pub fn new(device: &Device, value: Args) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -131,13 +127,7 @@ impl ArgsBuffer {
         }
     }
 
-    /// Dispatches an operation that writes
-    /// new value to the inherent buffer.
-    ///
-    /// Note that it implies same semantics with [`Queue::write_buffer`],
-    /// excepting that it ignores given value
-    /// if it has byte-to-byte equality with cached value.
-    pub fn write(&mut self, queue: &Queue, value: Args) {
+    pub fn write(&self, queue: &Queue, value: Args) {
         if bytes_of(&self.cache) == bytes_of(&value) {
             return;
         }
@@ -145,20 +135,17 @@ impl ArgsBuffer {
         queue.write_buffer(&self.buffer, 0, bytes_of(&value));
     }
 
-    /// Returns a readonly layout of `self`.
     #[must_use]
     pub const fn as_layout(&self) -> &BindGroupLayout {
         &self.layout
     }
 
-    /// Returns a readonly bind group of `self`.
     #[must_use]
     pub const fn as_binding(&self) -> &BindGroup {
         &self.bind
     }
 }
 
-/// A bindable buffer for [`DrawIndexedIndirectArgs`].
 #[derive(Debug)]
 pub struct IndirectArgsBuffer {
     buffer: Buffer,
@@ -167,7 +154,6 @@ pub struct IndirectArgsBuffer {
 }
 
 impl IndirectArgsBuffer {
-    /// Creates a new [`IndirectArgsBuffer`].
     #[must_use]
     pub fn new(device: &Device) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -219,13 +205,11 @@ impl IndirectArgsBuffer {
         }
     }
 
-    /// Returns a layout of `self`.
     #[must_use]
     pub const fn as_layout(&self) -> &BindGroupLayout {
         &self.layout
     }
 
-    /// Returns a bind group of `self`.
     #[must_use]
     pub const fn as_binding(&self) -> &BindGroup {
         &self.bind
