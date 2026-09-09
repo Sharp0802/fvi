@@ -1,6 +1,5 @@
-use std::ops::Deref;
-
 use bytemuck::{Pod, Zeroable, bytes_of};
+use std::ops::Deref;
 use wgpu::util::*;
 use wgpu::*;
 

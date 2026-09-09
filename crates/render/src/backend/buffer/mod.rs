@@ -5,7 +5,7 @@ use tracing::{error, instrument};
 use wgpu::util::*;
 use wgpu::*;
 
-use crate::shape::Shape;
+use crate::Shape;
 
 mod bind;
 mod iter;
@@ -69,7 +69,8 @@ impl<T: Shape> ShapeBuffer<T> {
         }
     }
 
-    /// Opens a mutable scope for `self`.
+    /// Opens a mutable scope for `self`,
+    /// that must be finalized by calling [`ShapeBufferScope::close`].
     ///
     /// See [`ShapeBufferScope::close`] for more details.
     #[must_use]
