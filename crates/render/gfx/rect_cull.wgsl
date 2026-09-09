@@ -25,5 +25,5 @@ fn cs_main(@builtin(global_invocation_id) tid: vec3u) {
         visibles[mapped] = index;
     }
 
-    rects[index].mask &= !BIT_ALIVE;
+    rects[index].mask &= ~BIT_ALIVE;
 }
