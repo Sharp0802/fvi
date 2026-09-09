@@ -3,6 +3,7 @@ use wgpu::*;
 
 use super::*;
 use crate::Id;
+use crate::types::*;
 
 macro_rules! decl_bundle {
     ($($name:ident),+ $(,)?) => {

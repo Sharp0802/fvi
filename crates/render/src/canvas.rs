@@ -1,7 +1,7 @@
 use wgpu::*;
 
+use crate::Id;
 use crate::backend::*;
-use crate::{Id, Shape};
 
 /// A canvas.
 #[derive(Debug)]
@@ -12,9 +12,8 @@ pub struct Canvas<'a> {
 }
 
 impl<'a> Canvas<'a> {
-    /// Creates a new [`Canvas`].
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         device: &'a Device,
         encoder: &'a mut CommandEncoder,
         state: &'a mut RenderStateBundle,

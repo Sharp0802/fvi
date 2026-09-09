@@ -11,5 +11,5 @@ use args::*;
 use buffer::*;
 pub use bundle::*;
 use pipeline::*;
-use shape::*;
-pub(crate) use state::*;
+pub use shape::*;
+pub use state::*;

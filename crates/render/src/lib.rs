@@ -5,6 +5,7 @@ mod canvas;
 mod context;
 mod error;
 mod id;
+mod types;
 
 #[path = "gfx.g.rs"]
 mod gfx;
