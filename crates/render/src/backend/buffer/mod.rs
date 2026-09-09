@@ -160,7 +160,7 @@ impl<'a, T: Shape> ShapeBufferScope<'a, T> {
     }
 
     #[instrument]
-    pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
+    pub fn close(mut self, device: &Device, encoder: &mut CommandEncoder) {
         if self.realloc {
             self.inner.realloc_unchecked(device, encoder);
         }

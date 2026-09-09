@@ -56,7 +56,7 @@ impl<T: Shape> RenderStateScope<'_, T> {
         self.inner.write(index, shape);
     }
 
-    pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
-        self.inner.close_unchecked(device, encoder);
+    pub fn close(self, device: &Device, encoder: &mut CommandEncoder) {
+        self.inner.close(device, encoder);
     }
 }

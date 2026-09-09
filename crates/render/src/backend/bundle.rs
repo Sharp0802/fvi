@@ -43,8 +43,8 @@ macro_rules! decl_bundle {
                 self.as_mut().write(id, shape);
             }
 
-            pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
-                $(self.$name.close_unchecked(device, encoder);)+
+            pub fn close(self, device: &Device, encoder: &mut CommandEncoder) {
+                $(self.$name.close(device, encoder);)+
             }
         }
 

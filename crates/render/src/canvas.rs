@@ -1,26 +1,24 @@
 use wgpu::*;
 
-use crate::Id;
 use crate::backend::*;
+use crate::{Id, label};
 
 /// A canvas.
 #[derive(Debug)]
 pub struct Canvas<'a> {
     device: &'a Device,
-    encoder: &'a mut CommandEncoder,
+    encoder: CommandEncoder,
     scope: RenderStateBundleScope<'a>,
 }
 
 impl<'a> Canvas<'a> {
     #[must_use]
-    pub(crate) const fn new(
-        device: &'a Device,
-        encoder: &'a mut CommandEncoder,
-        state: &'a mut RenderStateBundle,
-    ) -> Self {
+    pub(crate) fn new(device: &'a Device, state: &'a mut RenderStateBundle) -> Self {
         Self {
             device,
-            encoder,
+            encoder: device.create_command_encoder(&CommandEncoderDescriptor {
+                label: label!("encoder"),
+            }),
             scope: state.open(),
         }
     }
@@ -33,10 +31,9 @@ impl<'a> Canvas<'a> {
     {
         self.scope.write(id, shape);
     }
-}
 
-impl Drop for Canvas<'_> {
-    fn drop(&mut self) {
-        self.scope.close_unchecked(self.device, self.encoder);
+    pub(crate) fn close(mut self) -> CommandBuffer {
+        self.scope.close(self.device, &mut self.encoder);
+        self.encoder.finish()
     }
 }
