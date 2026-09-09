@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use tracing::instrument;
 use wgpu::*;
 
@@ -10,17 +12,16 @@ use crate::shape::Shape;
 pub struct Pipeline<T> {
     #[cfg(debug_assertions)]
     msaa: u32,
-    buffer: ShapeBuffer<T>,
-    indirect_args: IndirectArgsBuffer,
     cull: ComputePipeline,
     render: RenderPipeline,
+    _marker: PhantomData<fn() -> T>,
 }
 
 impl<T: Shape> Pipeline<T> {
     /// Creates a new [`Pipeline`].
     #[must_use]
     pub fn new(device: &Device, format: TextureFormat, msaa: u32, args: &ArgsBuffer) -> Self {
-        let buffer = ShapeBuffer::new(device);
+        let buffer: ShapeBuffer<T> = ShapeBuffer::new(device);
         let indirect_args = IndirectArgsBuffer::new(device);
 
         let cull_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -89,35 +90,46 @@ impl<T: Shape> Pipeline<T> {
         Self {
             #[cfg(debug_assertions)]
             msaa,
-            buffer,
-            indirect_args,
             cull,
             render,
+            _marker: PhantomData,
         }
     }
 
     /// Records operations on an encoder.
     #[instrument]
-    pub fn dispatch(&self, encoder: &mut CommandEncoder, view: &TextureView, args: &ArgsBuffer) {
-        self.dispatch_cull(encoder);
-        self.dispatch_render(encoder, view, args);
+    pub fn dispatch(
+        &self,
+        encoder: &mut CommandEncoder,
+        view: &TextureView,
+        state: &RenderState<T>,
+        args: &ArgsBuffer,
+    ) {
+        self.dispatch_cull(encoder, state);
+        self.dispatch_render(encoder, view, state, args);
     }
 
     #[instrument]
-    fn dispatch_cull(&self, encoder: &mut CommandEncoder) {
+    fn dispatch_cull(&self, encoder: &mut CommandEncoder, state: &RenderState<T>) {
         let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: label!("cull_pass"),
             timestamp_writes: None,
         });
 
         pass.set_pipeline(&self.cull);
-        pass.set_bind_group(0, self.indirect_args.as_binding(), &[]);
-        pass.set_bind_group(1, &self.buffer.as_binding().writable, &[]);
+        pass.set_bind_group(0, state.indirect_args.as_binding(), &[]);
+        pass.set_bind_group(1, &state.buffer.as_binding().writable, &[]);
         pass.dispatch_workgroups(64, 1, 1);
     }
 
     #[instrument]
-    fn dispatch_render(&self, encoder: &mut CommandEncoder, view: &TextureView, args: &ArgsBuffer) {
+    fn dispatch_render(
+        &self,
+        encoder: &mut CommandEncoder,
+        view: &TextureView,
+        state: &RenderState<T>,
+        args: &ArgsBuffer,
+    ) {
         debug_assert_eq!(
             self.msaa,
             view.texture().sample_count(),
@@ -143,7 +155,13 @@ impl<T: Shape> Pipeline<T> {
 
         pass.set_pipeline(&self.render);
         pass.set_bind_group(0, args.as_binding(), &[]);
-        pass.set_bind_group(1, &self.buffer.as_binding().readonly, &[]);
-        pass.draw_indexed_indirect(&self.indirect_args, 0);
+        pass.set_bind_group(1, &state.buffer.as_binding().readonly, &[]);
+        pass.draw_indexed_indirect(&state.indirect_args, 0);
     }
+}
+
+#[derive(Debug)]
+pub struct RenderState<T> {
+    buffer: ShapeBuffer<T>,
+    indirect_args: IndirectArgsBuffer,
 }
