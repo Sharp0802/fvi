@@ -8,6 +8,10 @@ mod id;
 mod types;
 
 #[path = "gfx.g.rs"]
+#[allow(
+    unsafe_code,
+    reason = "cannot modify generated source into safe code manually"
+)]
 mod gfx;
 
 pub use canvas::*;
