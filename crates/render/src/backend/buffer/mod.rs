@@ -85,7 +85,7 @@ impl<T: Shape> ShapeBuffer<T> {
         debug_assert!(shape.is_visible(), "setting dead rect at {index}");
 
         if let Some(old) = self.host.get_mut(index) {
-            if bytes_of(old) != bytes_of(&shape) {
+            if old.is_visible() || bytes_of(old) != bytes_of(&shape) {
                 *old = shape;
                 self.delta.insert(index);
             }

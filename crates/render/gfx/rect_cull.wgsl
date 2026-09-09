@@ -20,9 +20,10 @@ fn cs_main(@builtin(global_invocation_id) tid: vec3u) {
     let index = tid.x;
     if index >= arrayLength(&rects) { return; }
 
-    let rect = rects[index];
-    if (rect.mask & BIT_ALIVE) == BIT_ALIVE {
+    if (rects[index].mask & BIT_ALIVE) == BIT_ALIVE {
         let mapped = atomicAdd(&indirect.instance_count, 1u);
         visibles[mapped] = index;
     }
+
+    rects[index].mask &= !BIT_ALIVE;
 }
