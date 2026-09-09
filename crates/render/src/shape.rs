@@ -1,20 +1,24 @@
 use bytemuck::{Pod, Zeroable};
+use std::fmt::Debug;
 
+use crate::gfx::ShaderEntry;
 pub use crate::gfx::types::*;
 
-/// A visibility mask bit.
 pub const BIT_VIS: u32 = 0x0000_0001;
 
-/// A primitive shape data.
-pub trait ShapeData: PartialEq + Zeroable + Pod {
-    /// Returns whether the visibility mask is set.
+pub trait Shape: Debug + Zeroable + Pod {
+    const CULL: ShaderEntry;
+    const DRAW: ShaderEntry;
+
     fn is_visible(&self) -> bool;
 
-    /// Sets visibility mask.
     fn set_visibility(&mut self, visible: bool);
 }
 
-impl ShapeData for Rect {
+impl Shape for Rect {
+    const CULL: ShaderEntry = ShaderEntry::RectCull;
+    const DRAW: ShaderEntry = ShaderEntry::RectDraw;
+
     fn is_visible(&self) -> bool {
         self.mask & BIT_VIS != 0
     }
