@@ -12,10 +12,12 @@ use crate::error::{InitError, RenderError};
 mod adapter;
 mod config;
 mod device;
+mod shader;
 
 use adapter::list_adapters;
 pub use config::{DevicePref, RenderConfig, RenderPref, SurfacePref};
 pub use device::RenderDevice;
+pub use shader::Shader;
 
 const BACKENDS: Backends = Backends::PRIMARY;
 
