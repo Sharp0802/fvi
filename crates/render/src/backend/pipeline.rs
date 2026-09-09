@@ -1,12 +1,10 @@
 use std::marker::PhantomData;
-use std::num::NonZero;
 use tracing::instrument;
 use wgpu::*;
 
-use super::{ArgsBuffer, IndirectArgsBuffer, ShapeBuffer, ShapeBufferScope};
+use super::{ArgsBuffer, IndirectArgsBuffer, RenderState, ShapeBuffer};
 use crate::context::Shader;
-use crate::id::IdMap;
-use crate::{Id, Shape, label};
+use crate::{Shape, label};
 
 #[derive(Debug)]
 pub struct Pipeline<T> {
@@ -17,15 +15,16 @@ pub struct Pipeline<T> {
     _marker: PhantomData<fn() -> T>,
 }
 
+pub struct PipelineDescriptor<'a> {
+    shader: &'a Shader,
+    format: TextureFormat,
+    msaa: u32,
+    args: &'a ArgsBuffer,
+}
+
 impl<T: Shape> Pipeline<T> {
     #[must_use]
-    pub fn new(
-        device: &Device,
-        shader: &Shader,
-        format: TextureFormat,
-        msaa: u32,
-        args: &ArgsBuffer,
-    ) -> Self {
+    pub fn new(device: &Device, desc: &PipelineDescriptor) -> Self {
         let buffer: ShapeBuffer<T> = ShapeBuffer::new(device);
         let indirect_args = IndirectArgsBuffer::new(device);
 
@@ -40,14 +39,17 @@ impl<T: Shape> Pipeline<T> {
 
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: label!("render_pipeline_layout"),
-            bind_group_layouts: &[Some(args.as_layout()), Some(&buffer.as_layout().readonly)],
+            bind_group_layouts: &[
+                Some(desc.args.as_layout()),
+                Some(&buffer.as_layout().readonly),
+            ],
             immediate_size: 0,
         });
 
         let cull = device.create_compute_pipeline(&ComputePipelineDescriptor {
             label: label!("cull"),
             layout: Some(&cull_pipeline_layout),
-            module: &shader[T::CULL],
+            module: &desc.shader[T::CULL],
             entry_point: None,
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
@@ -57,7 +59,7 @@ impl<T: Shape> Pipeline<T> {
             label: label!("render"),
             layout: Some(&render_pipeline_layout),
             vertex: VertexState {
-                module: &shader[T::VERTEX],
+                module: &desc.shader[T::VERTEX],
                 entry_point: None,
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[],
@@ -73,16 +75,16 @@ impl<T: Shape> Pipeline<T> {
             },
             depth_stencil: None,
             multisample: MultisampleState {
-                count: msaa,
+                count: desc.msaa,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
-                module: &shader[T::FRAGMENT],
+                module: &desc.shader[T::FRAGMENT],
                 entry_point: None,
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
-                    format,
+                    format: desc.format,
                     blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: ColorWrites::all(),
                 })],
@@ -93,7 +95,7 @@ impl<T: Shape> Pipeline<T> {
 
         Self {
             #[cfg(debug_assertions)]
-            msaa,
+            msaa: desc.msaa,
             cull,
             render,
             _marker: PhantomData,
@@ -120,8 +122,7 @@ impl<T: Shape> Pipeline<T> {
         });
 
         pass.set_pipeline(&self.cull);
-        pass.set_bind_group(0, state.indirect_args.as_binding(), &[]);
-        pass.set_bind_group(1, &state.buffer.as_binding().writable, &[]);
+        state.bind_compute(&mut pass);
         pass.dispatch_workgroups(64, 1, 1);
     }
 
@@ -158,50 +159,7 @@ impl<T: Shape> Pipeline<T> {
 
         pass.set_pipeline(&self.render);
         pass.set_bind_group(0, args.as_binding(), &[]);
-        pass.set_bind_group(1, &state.buffer.as_binding().readonly, &[]);
-        pass.draw_indexed_indirect(&state.indirect_args, 0);
-    }
-}
-
-#[derive(Debug)]
-pub struct RenderState<T> {
-    map: IdMap,
-    buffer: ShapeBuffer<T>,
-    indirect_args: IndirectArgsBuffer,
-}
-
-impl<T: Shape> RenderState<T> {
-    #[must_use]
-    pub fn new(device: &Device) -> Self {
-        Self {
-            map: IdMap::new(const { NonZero::new(T::MAX_AGE).unwrap() }),
-            buffer: ShapeBuffer::new(device),
-            indirect_args: IndirectArgsBuffer::new(device),
-        }
-    }
-
-    #[must_use]
-    pub const fn open(&mut self) -> RenderStateScope<'_, T> {
-        RenderStateScope {
-            map: &mut self.map,
-            inner: self.buffer.open(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct RenderStateScope<'a, T: Shape> {
-    map: &'a mut IdMap,
-    inner: ShapeBufferScope<'a, T>,
-}
-
-impl<T: Shape> RenderStateScope<'_, T> {
-    pub fn write(&mut self, id: Id, shape: T) {
-        let index = self.map.map(id);
-        self.inner.write(index, shape);
-    }
-
-    pub fn close_unchecked(&mut self, device: &Device, encoder: &mut CommandEncoder) {
-        self.inner.close_unchecked(device, encoder);
+        state.bind_render(&mut pass);
+        state.draw(&mut pass);
     }
 }
