@@ -22,10 +22,14 @@ macro_rules! decl_bundle {
             }
 
             #[must_use]
-            pub const fn open(&mut self) -> RenderStateBundleScope {
+            pub const fn open(&mut self) -> RenderStateBundleScope<'_> {
                 RenderStateBundleScope {
                     $($name: self.$name.open(),)+
                 }
+            }
+
+            pub fn tick(&mut self) {
+                $(self.$name.tick();)+
             }
         }
 

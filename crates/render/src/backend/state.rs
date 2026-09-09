@@ -30,6 +30,10 @@ impl<T: Shape> RenderState<T> {
         }
     }
 
+    pub fn tick(&mut self) {
+        self.map.tick();
+    }
+
     pub fn bind_compute(&self, pass: &mut ComputePass) {
         pass.set_bind_group(0, self.indirect_args.as_binding(), &[]);
         pass.set_bind_group(1, &self.buffer.as_binding().writable, &[]);
