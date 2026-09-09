@@ -11,11 +11,9 @@ mod bind;
 mod iter;
 mod raw;
 
-use bind::*;
+pub use bind::*;
 use iter::*;
 use raw::*;
-
-pub use bind::ShapeBufferBindGroup;
 
 const MAX_BATCH_BYTES: usize = 2 * 1024;
 const MAX_HOLE_BYTES: usize = 256;
@@ -83,6 +81,12 @@ impl<T: Shape> ShapeBuffer<T> {
     #[must_use]
     pub const fn as_binding(&self) -> &ShapeBufferBindGroup<T> {
         &self.bind
+    }
+
+    /// Returns a set of [`BindGroupLayout`] corresponding to `self`.
+    #[must_use]
+    pub const fn as_layout(&self) -> &ShapeBufferBindGroupLayout<T> {
+        &self.layout
     }
 
     fn write(&mut self, id: usize, shape: T) -> bool {

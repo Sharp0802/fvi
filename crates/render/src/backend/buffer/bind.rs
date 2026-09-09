@@ -4,15 +4,22 @@ use wgpu::*;
 use super::raw::ShapeBufferRaw;
 use crate::label;
 
+/// A set of [`BindGroupLayout`] for [`ShapeBuffer`](super::ShapeBuffer).
 #[derive(Debug)]
 pub struct ShapeBufferBindGroupLayout<T> {
-    readonly: BindGroupLayout,
-    writable: BindGroupLayout,
+    /// A layout for readonly bind group.
+    /// See [`ShapeBufferBindGroup::readonly`] for more details.
+    pub readonly: BindGroupLayout,
+
+    /// A layout for writable bind group.
+    /// See [`ShapeBufferBindGroup::writable`] for more details.
+    pub writable: BindGroupLayout,
+
     _marker: PhantomData<fn() -> T>,
 }
 
 impl<T> ShapeBufferBindGroupLayout<T> {
-    pub fn new(device: &Device) -> Self {
+    pub(crate) fn new(device: &Device) -> Self {
         let readonly = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: label!("readonly"),
             entries: &[
