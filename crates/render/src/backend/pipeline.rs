@@ -1,9 +1,12 @@
 use std::marker::PhantomData;
+use std::num::NonZero;
 use tracing::instrument;
 use wgpu::*;
 
 use super::{ArgsBuffer, IndirectArgsBuffer, ShapeBuffer, ShapeBufferScope};
-use crate::{Shape, label};
+use crate::context::Shader;
+use crate::id::IdMap;
+use crate::{Id, Shape, label};
 
 /// A pipeline of the specific shape type.
 #[derive(Debug)]
@@ -18,7 +21,13 @@ pub struct Pipeline<T> {
 impl<T: Shape> Pipeline<T> {
     /// Creates a new [`Pipeline`].
     #[must_use]
-    pub fn new(device: &Device, format: TextureFormat, msaa: u32, args: &ArgsBuffer) -> Self {
+    pub fn new(
+        device: &Device,
+        shader: &Shader,
+        format: TextureFormat,
+        msaa: u32,
+        args: &ArgsBuffer,
+    ) -> Self {
         let buffer: ShapeBuffer<T> = ShapeBuffer::new(device);
         let indirect_args = IndirectArgsBuffer::new(device);
 
@@ -40,18 +49,17 @@ impl<T: Shape> Pipeline<T> {
         let cull = device.create_compute_pipeline(&ComputePipelineDescriptor {
             label: label!("cull"),
             layout: Some(&cull_pipeline_layout),
-            module: &T::CULL.create_shader_module_embed_source(device),
+            module: &shader[T::CULL],
             entry_point: None,
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });
 
-        let render_shader = &T::DRAW.create_shader_module_embed_source(device);
         let render = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: label!("render"),
             layout: Some(&render_pipeline_layout),
             vertex: VertexState {
-                module: render_shader,
+                module: &shader[T::VERTEX],
                 entry_point: None,
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[],
@@ -72,7 +80,7 @@ impl<T: Shape> Pipeline<T> {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
-                module: render_shader,
+                module: &shader[T::FRAGMENT],
                 entry_point: None,
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
