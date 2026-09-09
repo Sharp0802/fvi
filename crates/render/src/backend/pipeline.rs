@@ -1,11 +1,9 @@
 use std::marker::PhantomData;
-
 use tracing::instrument;
 use wgpu::*;
 
-use super::{ArgsBuffer, IndirectArgsBuffer, ShapeBuffer};
-use crate::label;
-use crate::shape::Shape;
+use super::{ArgsBuffer, IndirectArgsBuffer, ShapeBuffer, ShapeBufferScope};
+use crate::{Shape, label};
 
 /// A pipeline of the specific shape type.
 #[derive(Debug)]
@@ -160,8 +158,27 @@ impl<T: Shape> Pipeline<T> {
     }
 }
 
+/// A render state of specific shape type.
 #[derive(Debug)]
 pub struct RenderState<T> {
     buffer: ShapeBuffer<T>,
     indirect_args: IndirectArgsBuffer,
+}
+
+impl<T: Shape> RenderState<T> {
+    /// Creates a new [`RenderState`].
+    #[must_use]
+    pub fn new(device: &Device) -> Self {
+        Self {
+            buffer: ShapeBuffer::new(device),
+            indirect_args: IndirectArgsBuffer::new(device),
+        }
+    }
+
+    /// Opens a mutable scope of `self`,
+    /// that must be finalized by calling [`ShapeBufferScope::close`].
+    #[must_use]
+    pub const fn open(&mut self) -> ShapeBufferScope<'_, T> {
+        self.buffer.open()
+    }
 }
