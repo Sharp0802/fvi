@@ -15,11 +15,12 @@ pub struct Pipeline<T> {
     _marker: PhantomData<fn() -> T>,
 }
 
+#[derive(Debug)]
 pub struct PipelineDescriptor<'a> {
-    shader: &'a Shader,
-    format: TextureFormat,
-    msaa: u32,
-    args: &'a ArgsBuffer,
+    pub shader: &'a Shader,
+    pub format: TextureFormat,
+    pub sample_count: u32,
+    pub args: &'a ArgsBuffer,
 }
 
 impl<T: Shape> Pipeline<T> {
@@ -75,7 +76,7 @@ impl<T: Shape> Pipeline<T> {
             },
             depth_stencil: None,
             multisample: MultisampleState {
-                count: desc.msaa,
+                count: desc.sample_count,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -95,7 +96,7 @@ impl<T: Shape> Pipeline<T> {
 
         Self {
             #[cfg(debug_assertions)]
-            msaa: desc.msaa,
+            msaa: desc.sample_count,
             cull,
             render,
             _marker: PhantomData,

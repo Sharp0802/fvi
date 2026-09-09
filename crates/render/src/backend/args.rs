@@ -93,7 +93,6 @@ impl Args {
 
 #[derive(Debug)]
 pub struct ArgsBuffer {
-    cache: Args,
     buffer: Buffer,
     layout: BindGroupLayout,
     bind: BindGroup,
@@ -120,7 +119,6 @@ impl ArgsBuffer {
         });
 
         Self {
-            cache: value,
             buffer,
             layout,
             bind,
@@ -128,10 +126,6 @@ impl ArgsBuffer {
     }
 
     pub fn write(&self, queue: &Queue, value: Args) {
-        if bytes_of(&self.cache) == bytes_of(&value) {
-            return;
-        }
-
         queue.write_buffer(&self.buffer, 0, bytes_of(&value));
     }
 
