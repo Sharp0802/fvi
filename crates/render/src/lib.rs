@@ -1,7 +1,6 @@
 #![doc = include_str!("../README.md")]
 
 mod backend;
-mod canvas;
 pub mod config;
 pub mod context;
 mod error;
@@ -15,7 +14,6 @@ mod types;
 )]
 mod gfx;
 
-pub use canvas::*;
 pub use error::*;
 pub use id::Id;
 

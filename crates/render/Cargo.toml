@@ -9,6 +9,7 @@ license.workspace = true
 fvi-core.workspace = true
 
 bytemuck.workspace = true
+nalgebra.workspace = true
 tracing.workspace = true
 wgpu.workspace = true
 winit.workspace = true

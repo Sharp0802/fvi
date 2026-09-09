@@ -7,8 +7,9 @@ use wgpu::*;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use crate::backend::{Args, ArgsBuffer};
 use crate::config::*;
-use crate::{InitError, RenderError};
+use crate::{InitError, RenderError, label};
 
 mod adapter;
 mod device;
@@ -32,6 +33,7 @@ pub struct RenderContext {
     device: RenderDevice,
     shader: Shader,
     format: TextureFormat,
+    args: ArgsBuffer,
 }
 
 impl RenderContext {
@@ -69,16 +71,30 @@ impl RenderContext {
         let cap = surface.get_capabilities(device.as_ref());
         let format = cap.formats[0];
 
+        let args = ArgsBuffer::new(
+            &device,
+            Args {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "precision is not that required for this"
+                )]
+                scale: window.scale_factor() as f32,
+            },
+        );
+
+        let size = window.inner_size();
+
         let this = Self {
             config,
             pref: pref.clone(),
-            size: window.inner_size(),
+            size,
             window,
             instance,
             surface,
             device,
             shader,
             format,
+            args,
         };
 
         this.configure_surface();
@@ -194,11 +210,14 @@ impl RenderContext {
     }
 
     /// Resizes the surface as given.
+    #[instrument]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         if self.size != size {
-            self.size = size;
-            self.configure_surface();
+            return;
         }
+
+        self.size = size;
+        self.configure_surface();
     }
 
     /// Returns preferred texture format.
@@ -260,13 +279,13 @@ impl RenderContext {
     ///
     /// This function will return an error if it cannot be rendered.
     /// See [`RenderError`] for details.
-    pub async fn start(&mut self) -> Result<Option<RenderScope<'_>>, RenderError> {
+    pub async fn render(&mut self) -> Result<(), RenderError> {
         let Some((frame, configure)) = self.get_frame().await? else {
-            return Ok(None);
+            return Ok(());
         };
 
         let view = frame.texture.create_view(&TextureViewDescriptor {
-            label: Some("Surface.view"),
+            label: label!("surface_view"),
             format: Some(self.texture_format()),
             dimension: Some(TextureViewDimension::D2),
             usage: Some(TextureUsages::RENDER_ATTACHMENT),
@@ -277,64 +296,21 @@ impl RenderContext {
             array_layer_count: None,
         });
 
-        Ok(Some(RenderScope {
-            device: &self.device,
-            queue: self.device.as_ref(),
-            shader: &self.shader,
-            view,
-            frame,
-            configure,
-        }))
-    }
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: label!("encoder"),
+            });
 
-    /// Submits given state and renders onto surface.
-    pub fn done<I>(&self, state: Done<I>)
-    where
-        I: Iterator<Item = CommandBuffer>,
-    {
+        let command = encoder.finish();
         let queue: &Queue = self.device.as_ref();
-        queue.submit(state.ops);
-        queue.present(state.frame);
+        queue.submit([command]);
+        queue.present(frame);
 
-        if state.configure {
+        if configure {
             self.configure_surface();
         }
+
+        Ok(())
     }
-}
-
-/// A contextual render scope.
-#[derive(Debug)]
-pub struct RenderScope<'a> {
-    /// The current device.
-    pub device: &'a Device,
-    /// A queue corresponding to current device.
-    pub queue: &'a Queue,
-    /// The shader store.
-    pub shader: &'a Shader,
-    /// The current surface texture.
-    pub view: TextureView,
-    frame: SurfaceTexture,
-    configure: bool,
-}
-
-impl RenderScope<'_> {
-    /// Closes `self`, returning result state.
-    pub fn done<I>(self, ops: I) -> Done<I>
-    where
-        I: Iterator<Item = CommandBuffer>,
-    {
-        Done {
-            ops,
-            frame: self.frame,
-            configure: self.configure,
-        }
-    }
-}
-
-/// A result state from [`RenderScope`].
-#[derive(Debug)]
-pub struct Done<I> {
-    ops: I,
-    frame: SurfaceTexture,
-    configure: bool,
 }
