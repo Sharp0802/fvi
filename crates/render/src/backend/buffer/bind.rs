@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-
 use wgpu::*;
 
 use super::raw::ShapeBufferRaw;

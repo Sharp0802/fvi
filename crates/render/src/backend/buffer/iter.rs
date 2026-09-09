@@ -2,8 +2,7 @@ use std::iter::{FusedIterator, Peekable};
 use std::marker::PhantomData;
 use std::ops::Range;
 
-use super::MAX_BATCH_BYTES;
-use super::MAX_HOLE_BYTES;
+use super::{MAX_BATCH_BYTES, MAX_HOLE_BYTES};
 
 pub struct CoarseIter<I: Iterator, T> {
     iter: Peekable<I>,
