@@ -18,8 +18,6 @@ pub struct RenderConfig {
     pub texture_usages: TextureUsages,
     /// The memory hints.
     pub memory_hints: MemoryHints,
-    /// The number of layers.
-    pub layer_count: usize,
 }
 
 impl RenderConfig {
@@ -34,7 +32,6 @@ impl RenderConfig {
             features: self.features | min.features,
             texture_usages: self.texture_usages | min.texture_usages,
             memory_hints: self.memory_hints.clone(),
-            layer_count: self.layer_count,
         }
     }
 }
@@ -47,10 +44,10 @@ impl Default for RenderConfig {
                 max_texture_array_layers: 1,
                 ..Default::default()
             },
-            features: Features::empty(),
-            texture_usages: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            features: Features::TEXTURE_BINDING_ARRAY
+                | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
+            texture_usages: TextureUsages::RENDER_ATTACHMENT,
             memory_hints: MemoryHints::default(),
-            layer_count: 1,
         }
     }
 }
@@ -76,15 +73,6 @@ pub struct SurfacePref {
     pub vsync: bool,
 }
 
-/// An user preference for the layers.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct LayerPref {
-    /// The sample counts of each layers.
-    ///
-    /// Its length should be same with [`RenderConfig::layer_count`].
-    pub sample_counts: Vec<u32>,
-}
-
 /// An user preference for rendering.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RenderPref {
@@ -92,6 +80,4 @@ pub struct RenderPref {
     pub device: DevicePref,
     /// A preference for the surface.
     pub surface: SurfacePref,
-    /// A preference for the layers.
-    pub layer: LayerPref,
 }
