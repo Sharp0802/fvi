@@ -85,7 +85,7 @@ macro_rules! impl_ops {
 }
 
 impl_ops!(
-    /// Dependency independent pixels.
+    /// Density independent pixels.
     ///
     /// Semantically equals to `dp` of Android and `pt` of iOS.
     /// Instead of directly using DPI,
@@ -101,12 +101,9 @@ impl_ops!(
 
 impl Dp {
     /// Converts [`Dp`] into physical pixels using given scale factor.
+    #[must_use]
     pub fn to_px(self, scale: f32) -> f32 {
         scale.algebraic_mul(96.0 / 160.0).algebraic_mul(self.0)
-    }
-
-    pub fn from_px(px: f32, scale: f32) -> Self {
-        Self(px.algebraic_div(scale).algebraic_mul(160.0 / 90.0))
     }
 }
 
@@ -128,6 +125,7 @@ impl_ops!(
 impl Sp {
     /// Converts [`Sp`] into [`Dp`] using given font scale.
     #[rustfmt::skip]
+    #[must_use]
     pub fn to_dp(self, scale: f32) -> Dp {
         const R160: f32 = 1.0 / 6.0;
         const R230: f32 = 2.0 / 3.0;
