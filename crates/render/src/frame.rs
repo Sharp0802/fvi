@@ -7,6 +7,7 @@ use crate::gfx::blit::*;
 use crate::label;
 use crate::raw::View;
 
+/// A render frame.
 #[derive(Debug)]
 pub struct Frame {
     version: u32,
@@ -19,11 +20,16 @@ pub struct Frame {
     bind_group: WgpuBindGroup0,
 }
 
+/// A descriptor of [`Frame`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct FrameDescriptor {
+    /// A scale factor, in `px/dp`.
     pub scale: f32,
+    /// A size of frame, in px.
     pub size: PhysicalSize<u32>,
+    /// A format of frame.
     pub format: TextureFormat,
+    /// A sample count of frame.
     pub sample_count: u32,
 }
 
@@ -52,16 +58,10 @@ impl Frame {
         }
     }
 
-    pub(crate) fn desc(&self) -> FrameDescriptor {
-        FrameDescriptor {
-            scale: self.scale,
-            size: self.size,
-            format: self.target.texture().format(),
-            sample_count: self.target.texture().sample_count(),
-        }
-    }
-
-    pub(crate) fn resize(&mut self, size: PhysicalSize<u32>) {
+    /// Resizes `self` as given size.
+    ///
+    /// This function will invalidate cache of `self`.
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
         if self.size == size {
             return;
         }
