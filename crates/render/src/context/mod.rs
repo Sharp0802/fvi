@@ -7,17 +7,15 @@ use wgpu::*;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::backend::{Args, ArgsBuffer};
 use crate::config::*;
+use crate::draw::{RectBuffer, TextureMap};
 use crate::{InitError, RenderError, label};
 
 mod adapter;
 mod device;
-mod shader;
 
 use adapter::list_adapters;
 use device::*;
-pub use shader::*;
 
 const BACKENDS: Backends = Backends::PRIMARY;
 
@@ -31,9 +29,8 @@ pub struct RenderContext {
     instance: Instance,
     surface: Surface<'static>,
     device: RenderDevice,
-    shader: Shader,
+    texture_map: TextureMap,
     format: TextureFormat,
-    args: ArgsBuffer,
 }
 
 impl RenderContext {
@@ -64,37 +61,20 @@ impl RenderContext {
         });
 
         let surface = instance.create_surface(window.clone())?;
-
         let device = RenderDevice::new(&instance, &surface, &pref.device, &config).await?;
-        let shader = Shader::new(&device);
-
-        let cap = surface.get_capabilities(device.as_ref());
-        let format = cap.formats[0];
-
-        let args = ArgsBuffer::new(
-            &device,
-            Args {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "precision is not that required for this"
-                )]
-                scale: window.scale_factor() as f32,
-            },
-        );
-
-        let size = window.inner_size();
+        let texture_map = TextureMap::new(&device, device.as_ref());
+        let format = surface.get_capabilities(device.as_ref()).formats[0];
 
         let this = Self {
             config,
             pref: pref.clone(),
-            size,
+            size: window.inner_size(),
             window,
             instance,
             surface,
             device,
-            shader,
+            texture_map,
             format,
-            args,
         };
 
         this.configure_surface();
