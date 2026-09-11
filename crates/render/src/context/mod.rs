@@ -192,7 +192,7 @@ impl RenderContext {
     /// Resizes the surface as given.
     #[instrument]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        if self.size != size {
+        if self.size == size {
             return;
         }
 
