@@ -1,13 +1,17 @@
-#define_import_path types;
 
 struct Rect {
-    color   : vec4f,
-    center  : vec2f,
-    halfsize: vec2f,
-    radius  : f32,
-    z_order : u32,
-    texture : u32,
-    sampler : u32,
-    mask    : u32,
-    _pad    : array<u32, 3>,
+    pos   : vec2f,
+    size  : vec2f,
+    color : vec4f,
+    tex   : u32,
+    radius: f32,
+    border_radius: f32,
+    border_stroke: f32,
+    border_color : vec4f,
+};
+
+struct View {
+    size : vec2u,
+    scale: f32,
+    _pad : u32,
 };

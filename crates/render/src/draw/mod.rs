@@ -3,7 +3,7 @@ mod tex;
 mod view;
 
 use crate::gfx::draw::*;
-use crate::label;
+use crate::{Rect, View, label};
 
 pub use rect::*;
 pub use tex::*;
