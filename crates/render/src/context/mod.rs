@@ -253,13 +253,18 @@ impl RenderContext {
         Ok(Some((frame, configure)))
     }
 
-    /// Starts rendering phase, returning the contextual scope.
+    /// Acquires a frame, clears it, draws the UI, and presents it.
+    /// For host-owned targets, use [`Renderer`] directly.
     ///
     /// # Errors
     ///
     /// This function will return an error if it cannot be rendered.
     /// See [`RenderError`] for details.
-    pub async fn render(&mut self) -> Result<(), RenderError> {
+    pub async fn render(&mut self, ui: &RenderFrame, clear: Color) -> Result<(), RenderError> {
+        if self.size.width == 0 || self.size.height == 0 {
+            return Ok(());
+        }
+
         let Some((frame, configure)) = self.get_frame().await? else {
             return Ok(());
         };
@@ -281,6 +286,17 @@ impl RenderContext {
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: label!("encoder"),
             });
+
+        self.renderer.encode(
+            &mut encoder,
+            &RenderTarget {
+                view: &view,
+                resolve_target: None,
+                size: [self.size.width, self.size.height],
+                load: LoadOp::Clear(clear),
+            },
+            ui,
+        )?;
 
         let command = encoder.finish();
         let queue: &Queue = self.device.as_ref();
