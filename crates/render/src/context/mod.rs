@@ -152,7 +152,7 @@ impl RenderContext {
                 warn!("renewed surface is incompatibe with old adapter");
             }
 
-            supported
+            !supported
         };
 
         if renew_device {
