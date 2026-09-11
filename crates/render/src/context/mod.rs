@@ -8,14 +8,15 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::config::*;
-use crate::draw::{RectBuffer, TextureMap};
 use crate::{InitError, RenderError, label};
 
 mod adapter;
 mod device;
+mod texture;
 
-use adapter::list_adapters;
+use adapter::*;
 use device::*;
+pub use texture::*;
 
 const BACKENDS: Backends = Backends::PRIMARY;
 

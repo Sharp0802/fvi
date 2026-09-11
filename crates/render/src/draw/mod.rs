@@ -2,8 +2,10 @@ mod rect;
 mod tex;
 mod view;
 
+use crate::context::TextureMap;
 use crate::gfx::draw::*;
-use crate::{Rect, View, label};
+use crate::label;
+use crate::raw::{Rect, View};
 
 pub use rect::*;
 pub use tex::*;
