@@ -8,11 +8,13 @@ mod error;
 mod frame;
 mod id;
 mod raw;
+mod unit;
 
 pub use canvas::*;
 pub use error::*;
 pub use frame::*;
 pub use id::*;
+pub use unit::*;
 
 #[path = "gfx.g.rs"]
 #[allow(
