@@ -8,7 +8,8 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::config::*;
-use crate::{InitError, RenderError, label};
+use crate::gfx::blit;
+use crate::{Frame, InitError, RenderError, label};
 
 mod adapter;
 mod device;
@@ -29,9 +30,10 @@ pub struct RenderContext {
     size: PhysicalSize<u32>,
     instance: Instance,
     surface: Surface<'static>,
-    device: RenderDevice,
-    texture_map: TextureMap,
+    pub(crate) device: RenderDevice,
+    pub(crate) texture_map: TextureMap,
     format: TextureFormat,
+    pipeline: RenderPipeline,
 }
 
 impl RenderContext {
@@ -66,6 +68,39 @@ impl RenderContext {
         let texture_map = TextureMap::new(&device, device.as_ref());
         let format = surface.get_capabilities(device.as_ref()).formats[0];
 
+        let shader = blit::create_shader_module_embed_source(&device);
+        let pipeline_layout = blit::create_pipeline_layout(&device);
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: label!("pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: blit::vertex_state(&shader, &blit::vs_main_entry()),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(IndexFormat::Uint32),
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(blit::fragment_state(
+                &shader,
+                &blit::fs_main_entry([Some(ColorTargetState {
+                    format,
+                    blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: ColorWrites::ALL,
+                })]),
+            )),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let this = Self {
             config,
             pref: pref.clone(),
@@ -76,6 +111,7 @@ impl RenderContext {
             device,
             texture_map,
             format,
+            pipeline,
         };
 
         this.configure_surface();
@@ -123,41 +159,18 @@ impl RenderContext {
         list_adapters(&self.instance, &self.surface, &self.config).await
     }
 
-    #[instrument]
-    async fn renew_device(&mut self) -> Result<(), InitError> {
-        self.device = RenderDevice::new(
-            &self.instance,
-            &self.surface,
-            &self.pref.device,
-            &self.config,
-        )
-        .await?;
+    fn renew(&mut self) -> Result<(), RenderError> {
+        self.surface = self
+            .instance
+            .create_surface(self.window.clone())
+            .map_err(InitError::from)?;
 
-        Ok(())
-    }
-
-    /// Renews this [`RenderContext`].
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if it cannot be renewed.
-    /// See [`InitError`] for details.
-    #[instrument]
-    pub async fn renew(&mut self) -> Result<(), InitError> {
-        self.surface = self.instance.create_surface(self.window.clone())?;
-
-        let renew_device = self.device.is_lost() || {
+        if self.device.is_lost() || {
             let adapter: &Adapter = self.device.as_ref();
             let supported = adapter.is_surface_supported(&self.surface);
-            if !supported {
-                warn!("renewed surface is incompatibe with old adapter");
-            }
-
             !supported
-        };
-
-        if renew_device {
-            self.renew_device().await?;
+        } {
+            return Err(RenderError::DeviceLost);
         }
 
         self.configure_surface();
@@ -165,33 +178,16 @@ impl RenderContext {
         Ok(())
     }
 
-    /// Sets rendering preference as given.
-    ///
-    /// It invalidates the current adapter and device
-    /// if device preference of given one differs to configured one.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if it cannot be renewed.
-    /// See [`InitError`] for details.
-    #[instrument]
-    pub async fn set_preference(&mut self, pref: RenderPref) -> Result<(), InitError> {
-        let old_pref = std::mem::replace(&mut self.pref, pref);
-
-        if self.pref.device != old_pref.device {
-            info!("device preference changed");
-            self.renew_device().await?;
-            self.configure_surface();
-        } else if self.pref.surface != old_pref.surface {
+    /// Sets surface preference as given.
+    pub fn set_preference(&mut self, pref: SurfacePref) {
+        if self.pref.surface != pref {
+            self.pref.surface = pref;
             info!("surface preference changed");
             self.configure_surface();
         }
-
-        Ok(())
     }
 
     /// Resizes the surface as given.
-    #[instrument]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         if self.size == size {
             return;
@@ -201,20 +197,8 @@ impl RenderContext {
         self.configure_surface();
     }
 
-    /// Returns preferred texture format.
-    #[must_use]
-    pub fn texture_format(&self) -> TextureFormat {
-        self.format.add_srgb_suffix()
-    }
-
-    /// Returns the size of surface.
-    #[must_use]
-    pub const fn size(&self) -> PhysicalSize<u32> {
-        self.size
-    }
-
     #[instrument]
-    async fn get_frame(&mut self) -> Result<Option<(SurfaceTexture, bool)>, RenderError> {
+    fn get_frame(&mut self) -> Result<Option<(SurfaceTexture, bool)>, RenderError> {
         let mut configure = false;
         let mut retry = 0;
 
@@ -245,7 +229,7 @@ impl RenderContext {
                 }
                 CurrentSurfaceTexture::Lost => {
                     warn!("surface lost");
-                    self.renew().await.map_err(RenderError::Lost)?;
+                    self.renew()?;
                 }
                 CurrentSurfaceTexture::Validation => return Err(RenderError::Invalid),
             }
@@ -254,25 +238,29 @@ impl RenderContext {
         Ok(Some((frame, configure)))
     }
 
-    /// Acquires a frame, clears it, draws the UI, and presents it.
-    /// For host-owned targets, use [`Renderer`] directly.
+    /// Blits given frames onto the current surface.
     ///
     /// # Errors
     ///
     /// This function will return an error if it cannot be rendered.
     /// See [`RenderError`] for details.
-    pub async fn render(&mut self, ui: &RenderFrame, clear: Color) -> Result<(), RenderError> {
+    #[instrument(skip_all)]
+    pub fn render<'a>(
+        &mut self,
+        frames: impl Iterator<Item = &'a mut Frame>,
+        clear: Color,
+    ) -> Result<(), RenderError> {
         if self.size.width == 0 || self.size.height == 0 {
             return Ok(());
         }
 
-        let Some((frame, configure)) = self.get_frame().await? else {
+        let Some((frame, configure)) = self.get_frame()? else {
             return Ok(());
         };
 
         let view = frame.texture.create_view(&TextureViewDescriptor {
             label: label!("surface_view"),
-            format: Some(self.texture_format()),
+            format: Some(self.format),
             dimension: Some(TextureViewDimension::D2),
             usage: Some(TextureUsages::RENDER_ATTACHMENT),
             aspect: TextureAspect::All,
@@ -288,16 +276,31 @@ impl RenderContext {
                 label: label!("encoder"),
             });
 
-        self.renderer.encode(
-            &mut encoder,
-            &RenderTarget {
-                view: &view,
-                resolve_target: None,
-                size: [self.size.width, self.size.height],
-                load: LoadOp::Clear(clear),
-            },
-            ui,
-        )?;
+        {
+            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: label!("render"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(clear),
+                        store: StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            for frame in frames {
+                let bind_group = frame.update(self, &mut pass);
+                pass.set_pipeline(&self.pipeline);
+                bind_group.set(&mut pass);
+                pass.draw(0..3, 0..1);
+            }
+        }
 
         let command = encoder.finish();
         let queue: &Queue = self.device.as_ref();

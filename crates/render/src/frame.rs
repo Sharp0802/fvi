@@ -1,8 +1,9 @@
 use wgpu::*;
 use winit::dpi::PhysicalSize;
 
-use crate::context::TextureMap;
+use crate::context::RenderContext;
 use crate::draw::{Draw, RectBuffer};
+use crate::gfx::blit::*;
 use crate::label;
 use crate::raw::View;
 
@@ -10,9 +11,12 @@ use crate::raw::View;
 pub struct Frame {
     version: u32,
     scale: f32,
-    target: Texture,
+    size: PhysicalSize<u32>,
+    target: TextureView,
     rect_buffer: RectBuffer,
     pipeline: Draw,
+    dirty: bool,
+    bind_group: WgpuBindGroup0,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,42 +28,75 @@ pub struct FrameDescriptor {
 }
 
 impl Frame {
-    pub fn new(device: &Device, desc: &FrameDescriptor) -> Self {
+    pub(crate) fn new(device: &Device, desc: &FrameDescriptor) -> Self {
+        let target = Self::create_texture(
+            0,
+            device,
+            desc.size.width,
+            desc.size.height,
+            desc.format,
+            desc.sample_count,
+        );
+
+        let bind_group = Self::create_bind_group(device, &target);
+
         Self {
             version: 0,
             scale: desc.scale,
-            target: Self::create_texture(
-                0,
-                device,
-                desc.size.width,
-                desc.size.height,
-                desc.format,
-                desc.sample_count,
-            ),
+            size: desc.size,
+            target,
+            bind_group,
             rect_buffer: RectBuffer::new(device),
             pipeline: Draw::new(device, desc.format, desc.sample_count),
+            dirty: false,
         }
     }
 
-    pub fn resize(&mut self, device: &Device) {
-        self.version += 1;
-        self.target = Self::create_texture(
-            self.version,
-            device,
-            self.target.size().width,
-            self.target.size().height,
-            self.target.format(),
-            self.target.sample_count(),
-        );
+    pub(crate) fn desc(&self) -> FrameDescriptor {
+        FrameDescriptor {
+            scale: self.scale,
+            size: self.size,
+            format: self.target.texture().format(),
+            sample_count: self.target.texture().sample_count(),
+        }
     }
 
-    pub fn draw(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        pass: &mut RenderPass,
-        tex_map: &TextureMap,
-    ) {
+    pub(crate) fn resize(&mut self, size: PhysicalSize<u32>) {
+        if self.size == size {
+            return;
+        }
+
+        self.size = size;
+        self.dirty = true;
+    }
+
+    pub(crate) fn update(&mut self, cx: &RenderContext, pass: &mut RenderPass) -> &WgpuBindGroup0 {
+        if !self.dirty {
+            return &self.bind_group;
+        }
+
+        self.dirty = false;
+
+        let device = &cx.device;
+        let queue = cx.device.as_ref();
+        let tex_map = &cx.texture_map;
+
+        let old_tex = self.target.texture();
+        if self.size.width != self.target.texture().size().width
+            || self.size.height != self.target.texture().size().height
+        {
+            self.version += 1;
+            self.target = Self::create_texture(
+                self.version,
+                device,
+                self.size.width,
+                self.size.height,
+                old_tex.format(),
+                old_tex.sample_count(),
+            );
+            self.bind_group = Self::create_bind_group(device, &self.target);
+        }
+
         self.rect_buffer.apply(device, queue);
         self.pipeline.run(
             device,
@@ -68,11 +105,23 @@ impl Frame {
             &self.rect_buffer,
             tex_map,
             View {
-                size: [self.target.size().width, self.target.size().height],
+                size: [
+                    self.target.texture().size().width,
+                    self.target.texture().size().height,
+                ],
                 scale: self.scale,
                 _pad: 0,
             },
         );
+
+        &self.bind_group
+    }
+
+    fn create_bind_group(device: &Device, view: &TextureView) -> WgpuBindGroup0 {
+        WgpuBindGroup0::from_bindings(
+            device,
+            WgpuBindGroup0Entries::new(WgpuBindGroup0EntriesParams { tex: view }),
+        )
     }
 
     fn create_texture(
@@ -82,20 +131,25 @@ impl Frame {
         height: u32,
         format: TextureFormat,
         sample_count: u32,
-    ) -> Texture {
-        device.create_texture(&TextureDescriptor {
-            label: label!("target/{}", version),
-            size: Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count,
-            dimension: TextureDimension::D2,
-            format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
+    ) -> TextureView {
+        device
+            .create_texture(&TextureDescriptor {
+                label: label!("target/{}", version),
+                size: Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count,
+                dimension: TextureDimension::D2,
+                format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&TextureViewDescriptor {
+                label: label!("target_view/{}", version),
+                ..Default::default()
+            })
     }
 }

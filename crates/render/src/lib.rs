@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod canvas;
 pub mod config;
 pub mod context;
 mod draw;
@@ -8,6 +9,7 @@ mod frame;
 mod id;
 mod raw;
 
+pub use canvas::*;
 pub use error::*;
 pub use frame::*;
 pub use id::*;

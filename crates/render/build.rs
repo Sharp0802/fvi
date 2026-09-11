@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 | WgslShaderIrCapabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY
                 | WgslShaderIrCapabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
         )
+        .add_entry_point("gfx/blit.wgsl")
         .add_entry_point("gfx/draw.wgsl")
         .serialization_strategy(WgslTypeSerializeStrategy::Bytemuck)
         .type_map(NalgebraWgslTypeMap)

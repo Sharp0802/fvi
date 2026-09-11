@@ -55,6 +55,8 @@ impl From<wgpu::RequestDeviceError> for InitError {
 pub enum RenderError {
     /// The validation for current texture of the surface was failed.
     Invalid,
+    /// Device was lost.
+    DeviceLost,
     /// The surface was lost and failed to be recovered.
     ///
     /// This is an unrecoverable error,
@@ -70,6 +72,7 @@ impl Display for RenderError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid => write!(f, "frame validation failed"),
+            Self::DeviceLost => write!(f, "device lost"),
             Self::Lost(e) => write!(f, "couldn't recover surface lost: {e}"),
             Self::Fault => write!(f, "max attempt exceeded for frame acquisition"),
         }
@@ -79,7 +82,7 @@ impl Display for RenderError {
 impl Error for RenderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Invalid | Self::Fault => None,
+            Self::Invalid | Self::DeviceLost | Self::Fault => None,
             Self::Lost(init) => Some(init),
         }
     }
