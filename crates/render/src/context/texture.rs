@@ -6,6 +6,7 @@ use wgpu::*;
 
 use crate::label;
 
+/// A key for internal textures.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InternalTextureId(u32);
 
@@ -13,8 +14,10 @@ impl InternalTextureId {
     const WHITE: Self = Self(0);
 }
 
+/// A key of texture map.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TextureId {
+    /// An internal texture.
     Internal(InternalTextureId),
 }
 
@@ -24,15 +27,20 @@ impl From<InternalTextureId> for TextureId {
     }
 }
 
+/// An opaque reference to texture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextureRef(u32);
 
+/// An error during texture insertion.
 #[derive(Debug)]
 pub enum InsertionError {
+    /// The specified slot is already occupied.
     Occupied,
+    /// System has insufficient memory for requested operation.
     InsufficientMemory,
 }
 
+/// A texture map.
 #[derive(Debug)]
 pub struct TextureMap {
     pub(crate) version: u32,
@@ -42,7 +50,7 @@ pub struct TextureMap {
 }
 
 impl TextureMap {
-    pub fn new(device: &Device, queue: &Queue) -> Self {
+    pub(crate) fn new(device: &Device, queue: &Queue) -> Self {
         let version = 0;
 
         let white = device
@@ -74,7 +82,7 @@ impl TextureMap {
             version,
             vec: vec![white],
             bitmap: Vec::new(),
-            route: [(InternalTextureId::WHITE.into(), 0)].into_iter().collect(),
+            route: once((InternalTextureId::WHITE.into(), 0)).collect(),
         }
     }
 
@@ -88,6 +96,12 @@ impl TextureMap {
         None
     }
 
+    /// Inserts a texture into `self`.
+    ///
+    /// # Errors
+    ///
+    /// This function may return `Err`.
+    /// See [`InsertionError`] for more details.
     pub fn insert(
         &mut self,
         key: TextureId,
@@ -121,12 +135,19 @@ impl TextureMap {
         Ok(TextureRef(index32))
     }
 
+    /// Returns a texture corresponding to given key,
+    /// returning `None` if there is no such texture.
+    #[must_use]
     pub fn get(&self, key: &TextureId) -> Option<TextureRef> {
-        let &index = self.route.get(&key)?;
-        let index32 = index.try_into().expect("is checked at insert()");
+        let &index = self.route.get(key)?;
+        #[expect(clippy::missing_panics_doc, reason = "is checked at insert()")]
+        let index32 = index.try_into().unwrap();
         Some(TextureRef(index32))
     }
 
+    /// Updates existing texture at reference as given,
+    /// returning `Some` for existing old value;
+    /// otherwise `None` without any mutation of `self`.
     pub fn update(&mut self, tex: TextureRef, value: TextureView) -> Option<TextureView> {
         if self.bitmap[(tex.0 as usize) / 128] & (1 << (tex.0 % 128)) == 0 {
             return None;
@@ -136,6 +157,8 @@ impl TextureMap {
         Some(old)
     }
 
+    /// Removes a texture corresponding to given key,
+    /// returning `Some` for removed value; otherwise `None`.
     pub fn remove(&mut self, key: &TextureId) -> Option<TextureView> {
         let index = self.route.remove(key)?;
         self.bitmap[index / 128] &= !(1 << (index % 128));

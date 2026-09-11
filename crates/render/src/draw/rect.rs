@@ -40,14 +40,14 @@ impl RectBuffer {
 
         Self {
             version,
-            host,
             guest,
+            host,
             diffmap,
             belt,
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.host.len()
     }
 
@@ -184,10 +184,10 @@ impl Iterator for DiffIter<'_> {
     }
 }
 
-fn is_set(bitmap: &[u128], index: usize) -> bool {
+const fn is_set(bitmap: &[u128], index: usize) -> bool {
     bitmap[index / 128] & (1 << (index % 128)) != 0
 }
 
-fn set(bitmap: &mut [u128], index: usize) {
+const fn set(bitmap: &mut [u128], index: usize) {
     bitmap[index / 128] |= 1 << (index % 128);
 }

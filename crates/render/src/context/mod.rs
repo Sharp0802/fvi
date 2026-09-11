@@ -7,9 +7,9 @@ use wgpu::*;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::config::*;
 use crate::gfx::blit;
 use crate::{Frame, InitError, RenderError, label};
+use crate::{FrameDescriptor, config::*};
 
 mod adapter;
 mod device;
@@ -195,6 +195,11 @@ impl RenderContext {
 
         self.size = size;
         self.configure_surface();
+    }
+
+    /// Creates a new [`Frame`] with its descriptor.
+    pub fn create_frame(&self, desc: &FrameDescriptor) -> Frame {
+        Frame::new(&self.device, desc)
     }
 
     #[instrument]
