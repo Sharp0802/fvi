@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use wgpu::*;
 
 use super::*;
@@ -7,9 +6,8 @@ use crate::label;
 
 #[derive(Debug)]
 pub struct TextureMapBind {
-    version: u32,
     sampler: Sampler,
-    bind_group: WgpuBindGroup1,
+    bind_group: Option<(u32, WgpuBindGroup1)>,
 }
 
 impl TextureMapBind {
@@ -19,43 +17,32 @@ impl TextureMapBind {
             ..Default::default()
         });
 
-        let bind_group = WgpuBindGroup1::from_bindings(
-            device,
-            WgpuBindGroup1Entries::new(WgpuBindGroup1EntriesParams {
-                texs: &[],
-                samp: &sampler,
-            }),
-        );
-
         Self {
-            version: u32::MAX,
             sampler,
-            bind_group,
+            bind_group: None,
         }
     }
 
     pub fn update(&mut self, device: &Device, map: &TextureMap) -> &WgpuBindGroup1 {
-        if self.version != map.version {
-            self.version = map.version;
+        let snapshot = map.snapshot();
 
-            let refs: Vec<_> = map.vec.iter().collect();
-            self.bind_group = WgpuBindGroup1::from_bindings(
+        // fixme: refactor after polonious
+        if self
+            .bind_group
+            .as_ref()
+            .is_none_or(|(version, _)| *version != snapshot.version)
+        {
+            let refs: Vec<_> = snapshot.views.iter().collect();
+            let bind_group = WgpuBindGroup1::from_bindings(
                 device,
                 WgpuBindGroup1Entries::new(WgpuBindGroup1EntriesParams {
                     texs: &refs,
                     samp: &self.sampler,
                 }),
             );
+            self.bind_group = Some((snapshot.version, bind_group));
         }
 
-        &self.bind_group
-    }
-}
-
-impl Deref for TextureMapBind {
-    type Target = WgpuBindGroup1;
-
-    fn deref(&self) -> &Self::Target {
-        &self.bind_group
+        &self.bind_group.as_ref().unwrap().1
     }
 }

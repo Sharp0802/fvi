@@ -40,11 +40,17 @@ pub enum InsertionError {
     InsufficientMemory,
 }
 
+#[derive(Debug)]
+pub(crate) struct Snapshot<'a> {
+    pub version: u32,
+    pub views: &'a [TextureView],
+}
+
 /// A texture map.
 #[derive(Debug)]
 pub struct TextureMap {
-    pub(crate) version: u32,
-    pub(crate) vec: Vec<TextureView>,
+    version: u32,
+    vec: Vec<TextureView>,
     bitmap: Vec<u128>,
     route: HashMap<TextureId, usize>,
 }
@@ -83,6 +89,13 @@ impl TextureMap {
             vec: vec![white],
             bitmap: Vec::new(),
             route: once((InternalTextureId::WHITE.into(), 0)).collect(),
+        }
+    }
+
+    pub(crate) const fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            version: self.version,
+            views: self.vec.as_slice(),
         }
     }
 
