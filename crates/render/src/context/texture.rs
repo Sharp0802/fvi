@@ -40,6 +40,10 @@ pub enum InsertionError {
     InsufficientMemory,
 }
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "it's crate-scoped although parent is pub"
+)]
 #[derive(Debug)]
 pub(crate) struct Snapshot<'a> {
     pub version: u32,
@@ -92,7 +96,7 @@ impl TextureMap {
         }
     }
 
-    pub(crate) const fn snapshot(&self) -> Snapshot {
+    pub(crate) const fn snapshot(&self) -> Snapshot<'_> {
         Snapshot {
             version: self.version,
             views: self.vec.as_slice(),
