@@ -42,7 +42,7 @@ impl Default for RenderConfig {
             debug: cfg!(debug_assertions),
             limits: Limits {
                 max_texture_array_layers: 1,
-                max_binding_array_elements_per_shader_stage: 1,
+                max_binding_array_elements_per_shader_stage: 500_000,
                 ..Default::default()
             },
             features: Features::TEXTURE_BINDING_ARRAY
