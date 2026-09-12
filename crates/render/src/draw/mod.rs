@@ -14,22 +14,33 @@ pub use view::*;
 use wgpu::*;
 
 #[derive(Debug)]
-pub struct Draw {
-    rect_bind: RectBufferBind,
-    tex_bind: TextureMapBind,
-    view_bind: ViewBufferBind,
+struct DrawCache {
+    version: u32,
     pipeline: RenderPipeline,
 }
 
-impl Draw {
-    pub fn new(device: &Device, format: TextureFormat, sample_count: u32) -> Self {
-        let shader = create_shader_module_embed_source(device);
+impl DrawCache {
+    pub fn new(
+        device: &Device,
+        shader: &ShaderModule,
+        format: TextureFormat,
+        sample_count: u32,
+        bind_cache: &TextureMapBindCache,
+    ) -> Self {
+        let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: label!("layout/{}", bind_cache.version),
+            bind_group_layouts: &[
+                Some(&WgpuBindGroup0::get_bind_group_layout(device)),
+                Some(&bind_cache.layout),
+                Some(&WgpuBindGroup2::get_bind_group_layout(device)),
+            ],
+            immediate_size: 0,
+        });
 
-        let pipeline_layout = create_pipeline_layout(device);
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: label!("pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: vertex_state(&shader, &vs_main_entry()),
+            label: label!("pipeline/{}", bind_cache.version),
+            layout: Some(&layout),
+            vertex: vertex_state(shader, &vs_main_entry()),
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleStrip,
                 strip_index_format: Some(IndexFormat::Uint32),
@@ -46,7 +57,7 @@ impl Draw {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(fragment_state(
-                &shader,
+                shader,
                 &fs_main_entry([Some(ColorTargetState {
                     format,
                     blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -58,10 +69,35 @@ impl Draw {
         });
 
         Self {
+            version: bind_cache.version,
+            pipeline,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Draw {
+    format: TextureFormat,
+    sample_count: u32,
+    rect_bind: RectBufferBind,
+    tex_bind: TextureMapBind,
+    view_bind: ViewBufferBind,
+    shader: ShaderModule,
+    cache: Option<DrawCache>,
+}
+
+impl Draw {
+    pub fn new(device: &Device, format: TextureFormat, sample_count: u32) -> Self {
+        let shader = create_shader_module_embed_source(device);
+
+        Self {
+            format,
+            sample_count,
             rect_bind: RectBufferBind::new(),
             tex_bind: TextureMapBind::new(device),
             view_bind: ViewBufferBind::new(device),
-            pipeline,
+            shader,
+            cache: None,
         }
     }
 
@@ -74,13 +110,29 @@ impl Draw {
         tex_map: &TextureMap,
         view: View,
     ) {
+        let tex_cache = self.tex_bind.update(device, tex_map);
+
+        if self
+            .cache
+            .as_ref()
+            .is_none_or(|cache| cache.version != tex_cache.version)
+        {
+            self.cache = Some(DrawCache::new(
+                device,
+                &self.shader,
+                self.format,
+                self.sample_count,
+                tex_cache,
+            ));
+        }
+
         let groups = WgpuBindGroups {
             bind_group0: self.rect_bind.update(device, rect_buf),
-            bind_group1: self.tex_bind.update(device, tex_map),
+            bind_group1: &tex_cache.bind_group,
             bind_group2: self.view_bind.update(queue, view),
         };
 
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(&self.cache.as_ref().unwrap().pipeline);
         groups.set(pass);
         pass.draw(
             0..4,
