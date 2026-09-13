@@ -30,8 +30,8 @@ fn vs_main(
 ) -> Vert {
     let uvs = array(
         vec2f(0, 0),
-        vec2f(1, 0),
         vec2f(0, 1),
+        vec2f(1, 0),
         vec2f(1, 1),
     );
 
@@ -84,7 +84,7 @@ fn fs_main(vert: Vert) -> @location(0) vec4f {
     let rgb = (
         rect.border_color.rgb * ba +
         fill.rgb * fa * (1.0 - ba)
-    ) / max(a, 1e-6);
+    );
 
     return vec4f(rgb, a);
 }
