@@ -281,6 +281,16 @@ impl RenderContext {
                 label: label!("encoder"),
             });
 
+        let queue: &Queue = self.device.as_ref();
+        let bindings: Vec<_> = frames
+            .filter_map(|frame| {
+                let size = frame.size();
+                frame
+                    .update(&self.device, queue, &self.texture_map, &mut encoder)
+                    .map(|binding| (binding.clone(), size))
+            })
+            .collect();
+
         {
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: label!("render"),
@@ -299,16 +309,20 @@ impl RenderContext {
                 multiview_mask: None,
             });
 
-            for frame in frames {
-                let bind_group = frame.update(self, &mut pass);
-                pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(&self.pipeline);
+            for (bind_group, size) in &bindings {
+                pass.set_scissor_rect(
+                    0,
+                    0,
+                    size.width.min(self.size.width),
+                    size.height.min(self.size.height),
+                );
                 bind_group.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
         }
 
         let command = encoder.finish();
-        let queue: &Queue = self.device.as_ref();
         queue.submit([command]);
         queue.present(frame);
 
