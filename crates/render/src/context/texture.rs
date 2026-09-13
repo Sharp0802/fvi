@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::iter::{once, repeat_n};
+use std::iter::once;
 use std::mem::replace;
 use wgpu::util::*;
 use wgpu::*;
@@ -12,6 +12,7 @@ pub struct InternalTextureId(u32);
 
 impl InternalTextureId {
     const WHITE: Self = Self(0);
+    const COUNT: u32 = 1;
 }
 
 /// A key of texture map.
@@ -30,6 +31,25 @@ impl From<InternalTextureId> for TextureId {
 /// An opaque reference to texture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextureRef(u32);
+
+impl TextureRef {
+    /// A white texture.
+    pub const WHITE: Self = Self(InternalTextureId::WHITE.0);
+
+    pub(crate) const fn index(self) -> u32 {
+        self.0
+    }
+
+    pub(crate) const fn is_internal(self) -> bool {
+        self.index() < InternalTextureId::COUNT
+    }
+}
+
+impl From<InternalTextureId> for TextureRef {
+    fn from(value: InternalTextureId) -> Self {
+        Self(value.0)
+    }
+}
 
 /// An error during texture insertion.
 #[derive(Debug)]
@@ -56,7 +76,7 @@ pub struct TextureMap {
     version: u32,
     vec: Vec<TextureView>,
     bitmap: Vec<u128>,
-    route: HashMap<TextureId, usize>,
+    route: HashMap<TextureId, u32>,
 }
 
 impl TextureMap {
@@ -91,7 +111,7 @@ impl TextureMap {
         Self {
             version,
             vec: vec![white],
-            bitmap: Vec::new(),
+            bitmap: vec![1],
             route: once((InternalTextureId::WHITE.into(), 0)).collect(),
         }
     }
@@ -106,7 +126,10 @@ impl TextureMap {
     fn find_empty(&self) -> Option<usize> {
         for (i, &chunk) in self.bitmap.iter().enumerate() {
             if let Some(j) = (!chunk).lowest_one() {
-                return Some(i * 128 + j as usize);
+                let index = i * 128 + j as usize;
+                if index < self.vec.len() {
+                    return Some(index);
+                }
             }
         }
 
@@ -128,26 +151,23 @@ impl TextureMap {
             return Err(InsertionError::Occupied);
         }
 
-        let index = if let Some(index) = self.find_empty() {
-            self.route.insert(key, index);
-            self.bitmap[index / 128] |= 1 << (index % 128);
-            self.vec[index] = value;
-            index
-        } else {
-            let index = self.vec.len() * 128;
-
-            let white = self.vec[0].clone();
-            self.vec.extend(once(value).chain(repeat_n(white, 127)));
-            self.bitmap.push(1);
-            self.route.insert(key, index);
-            self.version += 1;
-
-            index
-        };
-
+        let index = self.find_empty().unwrap_or(self.vec.len());
         let index32 = index
             .try_into()
             .map_err(|_| InsertionError::InsufficientMemory)?;
+
+        if index == self.vec.len() {
+            if index / 128 == self.bitmap.len() {
+                self.bitmap.push(0);
+            }
+            self.vec.push(value);
+        } else {
+            self.vec[index] = value;
+        }
+
+        self.bitmap[index / 128] |= 1 << (index % 128);
+        self.route.insert(key, index32);
+        self.version = self.version.wrapping_add(1);
 
         Ok(TextureRef(index32))
     }
@@ -157,31 +177,45 @@ impl TextureMap {
     #[must_use]
     pub fn get(&self, key: &TextureId) -> Option<TextureRef> {
         let &index = self.route.get(key)?;
-        #[expect(clippy::missing_panics_doc, reason = "is checked at insert()")]
-        let index32 = index.try_into().unwrap();
-        Some(TextureRef(index32))
+        Some(TextureRef(index))
     }
 
     /// Updates existing texture at reference as given,
     /// returning `Some` for existing old value;
     /// otherwise `None` without any mutation of `self`.
+    ///
+    /// The internal textures cannot be updated.
     pub fn update(&mut self, tex: TextureRef, value: TextureView) -> Option<TextureView> {
-        if self.bitmap[(tex.0 as usize) / 128] & (1 << (tex.0 % 128)) == 0 {
+        let index = tex.0 as usize;
+        if tex.is_internal() || self.bitmap.get(index / 128)? & (1 << (index % 128)) == 0 {
             return None;
         }
 
-        let old = replace(&mut self.vec[tex.0 as usize], value);
+        let old = replace(self.vec.get_mut(index)?, value);
+        self.version = self.version.wrapping_add(1);
         Some(old)
     }
 
     /// Removes a texture corresponding to given key,
     /// returning `Some` for removed value; otherwise `None`.
+    ///
+    /// The internal textures cannot be removed.
     pub fn remove(&mut self, key: &TextureId) -> Option<TextureView> {
-        let index = self.route.remove(key)?;
-        self.bitmap[index / 128] &= !(1 << (index % 128));
+        let &index = self.route.get(key)?;
+        if TextureRef(index).is_internal() || (index as usize) >= self.vec.len() {
+            return None;
+        }
+        let occupied = self.bitmap.get_mut((index as usize) / 128)?;
+        let mask = 1 << (index % 128);
+        if *occupied & mask == 0 {
+            return None;
+        }
+        *occupied &= !mask;
+        self.route.remove(key);
 
         let white = self.vec[0].clone();
-        let old = replace(&mut self.vec[index], white);
+        let old = replace(&mut self.vec[index as usize], white);
+        self.version = self.version.wrapping_add(1);
         Some(old)
     }
 }
