@@ -1,104 +1,138 @@
-use std::iter::repeat_n;
 use std::ops::Range;
 
-use bytemuck::checked::cast_slice;
-use bytemuck::{Zeroable, bytes_of};
+use bytemuck::{Zeroable, bytes_of, cast_slice};
 use wgpu::util::*;
 use wgpu::*;
 
 use super::*;
 use crate::label;
 
-const CHUNK_SIZE: BufferAddress = 4096;
+const CHUNK_SIZE: usize = 4096;
 const MAX_HOLE: usize = 3;
 
-const USAGE: BufferUsages = BufferUsages::COPY_DST
-    .union(BufferUsages::COPY_SRC)
-    .union(BufferUsages::STORAGE);
+const USAGE: BufferUsages = BufferUsages::COPY_DST.union(BufferUsages::STORAGE);
 
 #[derive(Debug)]
 pub struct RectBuffer {
     version: u32,
     guest: Buffer,
-    host: Vec<Rect>,
-    diffmap: Vec<u128>,
+    state: RectState,
     belt: StagingBelt,
 }
 
 impl RectBuffer {
     pub fn new(device: &Device) -> Self {
         let version = 0;
-        let host = Vec::with_capacity(8192);
+        let state = RectState::new();
         let guest = device.create_buffer(&BufferDescriptor {
             label: label!("guest/{}", version),
-            size: (host.capacity() * size_of::<Rect>()) as BufferAddress,
+            size: (state.host.capacity() * size_of::<Rect>()) as BufferAddress,
             usage: USAGE,
             mapped_at_creation: false,
         });
-        let diffmap = Vec::with_capacity(host.capacity() / 128);
-        let belt = StagingBelt::new(device.clone(), CHUNK_SIZE);
+        let belt = StagingBelt::new(device.clone(), CHUNK_SIZE as BufferAddress);
 
         Self {
             version,
             guest,
-            host,
-            diffmap,
+            state,
             belt,
         }
     }
 
     pub const fn len(&self) -> usize {
-        self.host.len()
+        self.state.host.len()
     }
 
-    pub fn write(&mut self, index: usize, value: Rect) {
-        if self.host.len() <= index {
-            let size = self.host.len() - index + 1;
-            self.host.extend(repeat_n(Rect::zeroed(), size));
+    pub fn write(&mut self, index: usize, value: Rect) -> bool {
+        self.state.write(index, value)
+    }
+
+    pub fn truncate(&mut self, len: usize) -> bool {
+        self.state.truncate(len)
+    }
+
+    pub fn apply(&mut self, device: &Device, encoder: &mut CommandEncoder) {
+        if self.guest.size() < (self.state.host.len() * size_of::<Rect>()) as BufferAddress {
+            self.version += 1;
+
+            self.guest = device.create_buffer(&BufferDescriptor {
+                label: label!("guest/{}", self.version),
+                size: (self.state.host.capacity() * size_of::<Rect>()) as BufferAddress,
+                usage: USAGE,
+                mapped_at_creation: false,
+            });
+            self.state.mark_all();
         }
 
-        if bytes_of(&self.host[index]) == bytes_of(&value) {
-            return;
+        for diff in DiffIter::new(&self.state.diffmap, self.state.host.len()) {
+            let start = (diff.start * size_of::<Rect>()) as BufferAddress;
+            let size = (diff.len() * size_of::<Rect>()) as BufferAddress;
+
+            let mut view =
+                self.belt
+                    .write_buffer(encoder, &self.guest, start, BufferSize::new(size).unwrap());
+
+            view.copy_from_slice(cast_slice(&self.state.host[diff]));
+        }
+
+        self.belt.finish_and_recall_on_submit(encoder);
+        self.state.diffmap.fill(0);
+    }
+}
+
+#[derive(Debug)]
+struct RectState {
+    host: Vec<Rect>,
+    diffmap: Vec<u128>,
+}
+
+impl RectState {
+    fn new() -> Self {
+        let host = Vec::with_capacity(8192);
+        let diffmap = Vec::with_capacity(host.capacity().div_ceil(128));
+        Self { host, diffmap }
+    }
+
+    fn write(&mut self, index: usize, value: Rect) -> bool {
+        let old_len = self.host.len();
+        if old_len <= index {
+            let len = index.checked_add(1).expect("too many rects");
+            self.host.resize(len, Rect::zeroed());
+            self.diffmap.resize(len.div_ceil(128), 0);
+            for added in old_len..len {
+                set(&mut self.diffmap, added);
+            }
+        } else if bytes_of(&self.host[index]) == bytes_of(&value) {
+            return false;
         }
 
         self.host[index] = value;
         set(&mut self.diffmap, index);
+        true
     }
 
-    pub fn apply(&mut self, device: &Device, queue: &Queue) {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: label!("apply"),
-        });
-
-        if self.guest.size() < (self.host.len() * size_of::<Rect>()) as BufferAddress {
-            self.version += 1;
-
-            let new = device.create_buffer(&BufferDescriptor {
-                label: label!("guest/{}", self.version),
-                size: (self.host.capacity() * size_of::<Rect>()) as BufferAddress,
-                usage: USAGE,
-                mapped_at_creation: false,
-            });
-
-            encoder.copy_buffer_to_buffer(&self.guest, 0, &new, 0, self.guest.size());
+    fn truncate(&mut self, len: usize) -> bool {
+        if self.host.len() <= len {
+            return false;
         }
 
-        for diff in DiffIter::new(&self.diffmap) {
-            let start = (diff.start * size_of::<Rect>()) as BufferAddress;
-            let size = (diff.len() * size_of::<Rect>()) as BufferAddress;
+        self.host.truncate(len);
+        self.diffmap.truncate(len.div_ceil(128));
+        self.mask_tail();
+        true
+    }
 
-            let mut view = self.belt.write_buffer(
-                &mut encoder,
-                &self.guest,
-                start,
-                BufferSize::new(size).unwrap(),
-            );
+    fn mark_all(&mut self) {
+        self.diffmap.fill(u128::MAX);
+        self.mask_tail();
+    }
 
-            view.copy_from_slice(cast_slice(&self.host[diff]));
+    fn mask_tail(&mut self) {
+        let remainder = self.host.len() % 128;
+        if remainder != 0 {
+            *self.diffmap.last_mut().unwrap() &= (1 << remainder) - 1;
         }
-
-        let command = encoder.finish();
-        queue.submit([command]);
     }
 }
 
@@ -106,7 +140,7 @@ impl RectBuffer {
 pub struct RectBufferBind(Option<(u32, WgpuBindGroup0)>);
 
 impl RectBufferBind {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(None)
     }
 
@@ -114,7 +148,7 @@ impl RectBufferBind {
         if self
             .0
             .as_ref()
-            .is_none_or(|(ver, _)| *ver == buffer.version)
+            .is_none_or(|(ver, _)| *ver != buffer.version)
         {
             let bind_group = WgpuBindGroup0::from_bindings(
                 device,
@@ -133,19 +167,17 @@ impl RectBufferBind {
 #[derive(Debug)]
 struct DiffIter<'a> {
     diffmap: &'a [u128],
+    len: usize,
     index: usize,
 }
 
 impl<'a> DiffIter<'a> {
-    pub fn new(diffmap: &'a [u128]) -> Self {
-        let index = diffmap
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &chk)| chk.lowest_one().map(|off| i * 128 + off as usize))
-            .next()
-            .unwrap_or(diffmap.len() * 128);
-
-        Self { diffmap, index }
+    pub const fn new(diffmap: &'a [u128], len: usize) -> Self {
+        Self {
+            diffmap,
+            len,
+            index: 0,
+        }
     }
 }
 
@@ -153,30 +185,25 @@ impl Iterator for DiffIter<'_> {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index * 128 >= self.diffmap.len() || !is_set(self.diffmap, self.index) {
+        while self.index < self.len && !is_set(self.diffmap, self.index) {
+            self.index += 1;
+        }
+        if self.index == self.len {
             return None;
         }
 
         let start = self.index;
-
-        let mut hole = 0;
-        while self.index * 128 < self.diffmap.len()
-            && (self.index - start) < (CHUNK_SIZE as usize / size_of::<Rect>())
-        {
+        let limit = self
+            .len
+            .min(start.saturating_add(CHUNK_SIZE / size_of::<Rect>()));
+        let mut end = start + 1;
+        self.index += 1;
+        while self.index < limit {
             if is_set(self.diffmap, self.index) {
-                hole = 0;
-                self.index += 1;
-            } else if hole >= MAX_HOLE {
+                end = self.index + 1;
+            } else if self.index - end >= MAX_HOLE {
                 break;
-            } else {
-                hole += 1;
             }
-        }
-
-        let end = self.index;
-
-        // TODO: use more efficient algorithm to skip holes
-        while self.index * 128 < self.diffmap.len() && !is_set(self.diffmap, self.index) {
             self.index += 1;
         }
 
