@@ -106,6 +106,7 @@ impl Dp {
         scale.algebraic_mul(96.0 / 160.0).algebraic_mul(self.0)
     }
 
+    /// Creates [`Dp`] from physical pixels and scale factor.
     #[must_use]
     pub fn from_px(px: f32, scale: f32) -> Self {
         Self(px.algebraic_mul(160.0 / 90.0).algebraic_div(scale))
