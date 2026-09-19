@@ -346,4 +346,9 @@ impl RenderContext {
 
         Ok(())
     }
+
+    /// Advances a tick to manage resources.
+    pub fn update(&mut self) {
+        self.atlas_set.update();
+    }
 }
