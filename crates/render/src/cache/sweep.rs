@@ -28,12 +28,12 @@ impl<K: Eq + Hash, V> Sweep<'_, K, V> {
 
         while let Some(item) = self.cache.segments[self.segment].items.get(self.item) {
             let loc = ItemLoc {
-                segment: self.segment as u32,
-                item: self.item as u32,
+                segment: self.segment.try_into().expect("segment index too large"),
+                item: self.item.try_into().expect("item index too large"),
             };
 
             if item.epoch != now {
-                let (entry, removed) = self.cache.remove(&loc);
+                let (entry, removed) = self.cache.remove(loc);
                 entry.remove();
                 return Some((removed.key, removed.value));
             }
@@ -43,7 +43,7 @@ impl<K: Eq + Hash, V> Sweep<'_, K, V> {
                 continue;
             }
 
-            let (entry, removed) = self.cache.remove(&loc);
+            let (entry, removed) = self.cache.remove(loc);
             let bucket = entry.bucket_index();
 
             let items = &mut self.cache.segments[self.segment + 1].items;
@@ -51,8 +51,8 @@ impl<K: Eq + Hash, V> Sweep<'_, K, V> {
             items.push(removed);
 
             let entry = self.cache.table.get_bucket_mut(bucket).unwrap();
-            entry.loc.segment = (self.segment + 1) as u32;
-            entry.loc.item = index as u32;
+            entry.loc.segment = loc.segment + 1;
+            entry.loc.item = index.try_into().unwrap();
         }
 
         None
@@ -95,6 +95,7 @@ impl<K: Eq + Hash, V> FusedIterator for Sweep<'_, K, V> {}
 
 impl<K: Eq + Hash, V> Drop for Sweep<'_, K, V> {
     fn drop(&mut self) {
+        #![expect(clippy::debug_assert_with_mut_call, reason = "it's dropping")]
         debug_assert!(self.next().is_none());
         self.cache.adapt();
     }

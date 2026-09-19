@@ -105,7 +105,7 @@ impl<K: Eq + Hash, V> Cache<K, V> {
         entry
     }
 
-    fn remove(&mut self, loc: &ItemLoc) -> (OccupiedEntry<TableEntry>, Item<K, V>) {
+    fn remove(&mut self, loc: ItemLoc) -> (OccupiedEntry<'_, TableEntry>, Item<K, V>) {
         let segment = loc.segment as usize;
         let index = loc.item as usize;
 
@@ -116,7 +116,7 @@ impl<K: Eq + Hash, V> Cache<K, V> {
 
         let removed_bucket = self
             .table
-            .find_bucket_index(removed_hash, |entry| entry.loc == *loc)
+            .find_bucket_index(removed_hash, |entry| entry.loc == loc)
             .unwrap();
 
         let items = &mut self.segments[segment].items;
@@ -135,7 +135,7 @@ impl<K: Eq + Hash, V> Cache<K, V> {
                 .find_mut(moved_hash, |entry| entry.loc == old_loc)
                 .unwrap();
 
-            moved_entry.loc = *loc;
+            moved_entry.loc = loc;
         }
 
         let occupied = self.table.get_bucket_entry(removed_bucket).unwrap();
@@ -148,11 +148,11 @@ impl<K: Eq + Hash, V> Cache<K, V> {
         &self.segments[entry.loc.segment as usize].items[entry.loc.item as usize].value
     }
 
-    pub fn tick(&mut self) {
+    pub const fn tick(&mut self) {
         self.now = self.now.wrapping_add(1);
     }
 
-    pub fn sweep(&mut self) -> Sweep<K, V> {
+    pub fn sweep(&mut self) -> Sweep<'_, K, V> {
         for (i, segment) in self.segments.iter().enumerate().rev() {
             if segment.is_sweep_required() {
                 return Sweep::new(self, i + 1);
