@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod cache;
 mod canvas;
 pub mod config;
 pub mod context;
@@ -8,8 +9,10 @@ mod error;
 mod frame;
 mod id;
 mod raw;
+pub mod text;
 mod unit;
 
+pub(crate) use cache::*;
 pub use canvas::*;
 pub use error::*;
 pub use frame::*;

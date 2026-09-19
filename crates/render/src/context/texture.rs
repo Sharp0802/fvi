@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Display;
 use std::iter::once;
 use std::mem::replace;
 use wgpu::util::*;
 use wgpu::*;
 
 use crate::label;
+use crate::text::AtlasId;
 
 /// A key for internal textures.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,11 +23,19 @@ impl InternalTextureId {
 pub enum TextureId {
     /// An internal texture.
     Internal(InternalTextureId),
+    /// An atlas texture.
+    Atlas(AtlasId),
 }
 
 impl From<InternalTextureId> for TextureId {
     fn from(value: InternalTextureId) -> Self {
         Self::Internal(value)
+    }
+}
+
+impl From<AtlasId> for TextureId {
+    fn from(value: AtlasId) -> Self {
+        Self::Atlas(value)
     }
 }
 
@@ -59,6 +70,19 @@ pub enum InsertionError {
     /// System has insufficient memory for requested operation.
     InsufficientMemory,
 }
+
+impl Display for InsertionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            Self::Occupied => "already occupied",
+            Self::InsufficientMemory => "insufficient memory",
+        };
+
+        f.write_str(msg)
+    }
+}
+
+impl Error for InsertionError {}
 
 #[expect(
     clippy::redundant_pub_crate,
@@ -175,25 +199,19 @@ impl TextureMap {
     /// Returns a texture corresponding to given key,
     /// returning `None` if there is no such texture.
     #[must_use]
-    pub fn get(&self, key: &TextureId) -> Option<TextureRef> {
+    pub fn find(&self, key: &TextureId) -> Option<TextureRef> {
         let &index = self.route.get(key)?;
         Some(TextureRef(index))
     }
 
-    /// Updates existing texture at reference as given,
-    /// returning `Some` for existing old value;
-    /// otherwise `None` without any mutation of `self`.
+    /// Returns a texture from its reference.
     ///
-    /// The internal textures cannot be updated.
-    pub fn update(&mut self, tex: TextureRef, value: TextureView) -> Option<TextureView> {
-        let index = tex.0 as usize;
-        if tex.is_internal() || self.bitmap.get(index / 128)? & (1 << (index % 128)) == 0 {
-            return None;
-        }
-
-        let old = replace(self.vec.get_mut(index)?, value);
-        self.version = self.version.wrapping_add(1);
-        Some(old)
+    /// # Panics
+    ///
+    /// This function may panic if corresponding texture has been removed.
+    #[must_use]
+    pub fn get(&self, key: TextureRef) -> &TextureView {
+        &self.vec[key.0 as usize]
     }
 
     /// Removes a texture corresponding to given key,

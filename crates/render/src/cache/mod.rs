@@ -67,6 +67,11 @@ impl<K: Eq + Hash, V> Cache<K, V> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.segments.clear();
+        self.table.clear();
+    }
+
     fn fetch_entry(&mut self, key: K, default: impl FnOnce(&K) -> V) -> TableEntry {
         let hash = self.hasher.hash_one(&key);
 

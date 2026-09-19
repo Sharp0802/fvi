@@ -105,6 +105,11 @@ impl Dp {
     pub fn to_px(self, scale: f32) -> f32 {
         scale.algebraic_mul(96.0 / 160.0).algebraic_mul(self.0)
     }
+
+    #[must_use]
+    pub fn from_px(px: f32, scale: f32) -> Self {
+        Self(px.algebraic_mul(160.0 / 90.0).algebraic_div(scale))
+    }
 }
 
 impl_ops!(
