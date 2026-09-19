@@ -8,6 +8,7 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::gfx::blit;
+use crate::text::AtlasSet;
 use crate::{Frame, InitError, RenderError, label};
 use crate::{FrameDescriptor, config::*};
 
@@ -32,6 +33,7 @@ pub struct RenderContext {
     surface: Surface<'static>,
     pub(crate) device: RenderDevice,
     pub(crate) texture_map: TextureMap,
+    pub(crate) atlas_set: AtlasSet,
     format: TextureFormat,
     pipeline: RenderPipeline,
 }
@@ -101,6 +103,12 @@ impl RenderContext {
             cache: None,
         });
 
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "that much precision is unnecessary for glyph rasterization"
+        )]
+        let atlas_set = AtlasSet::new(window.scale_factor() as f32);
+
         let this = Self {
             config,
             pref: pref.clone(),
@@ -110,6 +118,7 @@ impl RenderContext {
             surface,
             device,
             texture_map,
+            atlas_set,
             format,
             pipeline,
         };
@@ -195,6 +204,11 @@ impl RenderContext {
 
         self.size = size;
         self.configure_surface();
+    }
+
+    /// Rescales as given.
+    pub fn rescale(&mut self, scale: f32) {
+        self.atlas_set.rescale(scale);
     }
 
     /// Creates a new [`Frame`] with its descriptor.
