@@ -43,7 +43,7 @@ impl TextStyleBuilder {
 
     /// Builds [`TextStyle`].
     #[must_use]
-    pub const fn build(self) -> TextStyle {
+    pub fn build(self) -> TextStyle {
         TextStyle {
             font: self.font,
             weight: self.weight.to_ne_bytes(),
