@@ -26,13 +26,7 @@ winit = "0.30"
 
 # test
 criterion = "0.8"
-naga = { version = "30.0", features = ["wgsl-in"] }
 proptest = "1"
-
-# macro
-proc-macro2 = "1.0"
-quote = "1.0"
-venial = "0.6"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
