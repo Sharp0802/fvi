@@ -4,7 +4,7 @@
 > Experimental; API may not be stable.
 
 `fvi` (**f**ast **v**isual **i**nterface)
-is an immediate mode GUI framework,
+is an immediate-mode-styled retained GUI framework,
 providing highly customizable way to draw things.
 
 ## License
