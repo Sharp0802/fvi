@@ -1,10 +1,8 @@
 #![doc = include_str!("../README.md")]
 
-pub mod app;
-mod layout;
-mod pref;
+pub mod config;
 
-pub use app::*;
+extern crate self as fvi;
+
 pub use fvi_core as core;
 pub use fvi_render as render;
-pub use pref::*;
