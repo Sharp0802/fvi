@@ -63,7 +63,7 @@ impl From<InternalTextureId> for TextureRef {
 }
 
 /// An error during texture insertion.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum InsertionError {
     /// The specified slot is already occupied.
     Occupied,
