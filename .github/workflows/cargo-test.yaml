@@ -1,0 +1,23 @@
+name: Cargo Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Load DevShell
+        uses: nicknovitski/nix-develop@v1
+
+      - name: Run cargo-deny check
+        run: cargo deny check
+
+      - name: Run tests
+        run: cargo test
