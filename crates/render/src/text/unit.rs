@@ -7,7 +7,7 @@ impl Unit {
     const PRECF: f32 = 4.0;
 
     pub const fn fract(self) -> Self {
-        Self(self.0 - (self.0 % Self::PRECI))
+        Self(self.0 % Self::PRECI)
     }
 }
 
