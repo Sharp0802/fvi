@@ -54,7 +54,7 @@ impl<'a> Image<'a> {
             self.data,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(self.width),
+                bytes_per_row: Some(self.width * if self.colored { 4 } else { 1 }),
                 rows_per_image: Some(self.height),
             },
             Extent3d {
