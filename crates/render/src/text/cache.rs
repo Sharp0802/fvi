@@ -29,7 +29,7 @@ struct GlyphData {
 
 #[derive(Debug)]
 pub struct GlyphCache {
-    cache: Cache<GlyphKey, GlyphData>,
+    cache: Cache<GlyphKey, Option<GlyphData>>,
     atlas: Atlas,
     colored_atlas: Atlas,
     rcx: RasterContext,
@@ -110,26 +110,32 @@ impl GlyphCache {
                         key.style.y_fract.into(),
                     )?;
 
+                    if image.is_empty() {
+                        return Ok(None);
+                    }
+
                     let view = if image.colored {
                         self.colored_atlas.store(device, queue, &image)
                     } else {
                         self.atlas.store(device, queue, &image)
                     };
 
-                    Ok(GlyphData {
+                    Ok(Some(GlyphData {
                         colored: image.colored,
                         view,
-                    })
+                    }))
                 },
             )?;
 
-            let part = if data.colored {
-                self.colored_atlas.read(&data.view)
-            } else {
-                self.atlas.read(&data.view)
-            };
+            if let Some(data) = data {
+                let part = if data.colored {
+                    self.colored_atlas.read(&data.view)
+                } else {
+                    self.atlas.read(&data.view)
+                };
 
-            buf.push(part);
+                buf.push(part);
+            }
         }
 
         Ok(())
@@ -137,6 +143,8 @@ impl GlyphCache {
 
     pub fn update(&mut self) {
         for (_, data) in self.cache.sweep() {
+            let Some(data) = data else { continue };
+
             if data.colored {
                 self.colored_atlas.remove(data.view);
             } else {
