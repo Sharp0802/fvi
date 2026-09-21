@@ -5,19 +5,19 @@ use super::SwashImage;
 
 #[derive(Clone, Debug)]
 pub struct Image<'a> {
-    format: TextureFormat,
-    width: u32,
-    height: u32,
-    data: &'a [u8],
+    pub colored: bool,
+    pub width: u32,
+    pub height: u32,
+    pub data: &'a [u8],
 }
 
 impl<'a> Image<'a> {
     pub fn from(value: &'a SwashImage) -> Self {
         Self {
-            format: match value.content {
-                Content::Mask => TextureFormat::R8Unorm,
-                Content::SubpixelMask => TextureFormat::Rgba8Unorm,
-                Content::Color => TextureFormat::Rgba8Unorm,
+            colored: match value.content {
+                Content::Mask => false,
+                Content::SubpixelMask => true,
+                Content::Color => true,
             },
             width: value.placement.width,
             height: value.placement.height,
@@ -27,7 +27,14 @@ impl<'a> Image<'a> {
 
     pub fn write_to(&self, queue: &Queue, dst: &Texture, origin: Origin3d) {
         debug_assert_eq!((self.width * self.height) as usize, self.data.len());
-        debug_assert_eq!(self.format, dst.format());
+        debug_assert_eq!(
+            if self.colored {
+                TextureFormat::Rgba8Unorm
+            } else {
+                TextureFormat::R8Unorm
+            },
+            dst.format()
+        );
 
         queue.write_texture(
             TexelCopyTextureInfo {
