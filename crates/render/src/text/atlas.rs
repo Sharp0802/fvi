@@ -13,7 +13,6 @@ const PAGE_SIZE: u32 = 2048;
 pub struct AtlasView {
     page: usize,
     id: AllocId,
-    pos: [u32; 2],
 }
 
 #[derive(Debug)]
@@ -42,7 +41,6 @@ impl Atlas {
                 return AtlasView {
                     page: i,
                     id: alloc.id,
-                    pos: alloc.pos,
                 };
             }
         }
@@ -62,7 +60,6 @@ impl Atlas {
         AtlasView {
             page: page_id,
             id: alloc.id,
-            pos: alloc.pos,
         }
     }
 
@@ -74,7 +71,6 @@ impl Atlas {
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct PageAlloc {
     id: AllocId,
-    pos: [u32; 2],
 }
 
 struct Page {
@@ -131,10 +127,7 @@ impl Page {
             },
         );
 
-        Some(PageAlloc {
-            id: alloc.id,
-            pos: pos.to_array(),
-        })
+        Some(PageAlloc { id: alloc.id })
     }
 
     pub fn remove(&mut self, alloc: AllocId) {
