@@ -39,7 +39,7 @@ impl<K, V> Segment<K, V> {
         }
     }
 
-    pub fn is_sweep_required(&self) -> bool {
+    pub const fn is_sweep_required(&self) -> bool {
         self.items.len() > self.max_len
     }
 }
