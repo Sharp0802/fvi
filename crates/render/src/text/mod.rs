@@ -6,6 +6,7 @@ mod error;
 mod font;
 mod image;
 mod raster;
+mod shape;
 mod style;
 mod unit;
 
@@ -36,5 +37,19 @@ impl GlyphContext {
 
     pub fn update(&mut self) {
         self.cache.update();
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Text {
+    string: String,
+}
+
+impl Text {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            string: String::new(),
+        }
     }
 }

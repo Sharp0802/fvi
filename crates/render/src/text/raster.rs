@@ -5,13 +5,13 @@ use swash::zeno::Vector;
 
 use super::SwashImage;
 use crate::Theme;
-use crate::text::{FontRef, Image, RasterizationError};
+use crate::text::{FontRef, Image, RasterizationError, Unit};
 
 #[derive(Clone, Debug)]
 pub struct RasterStyle<'a> {
     pub font: FontRef<'a>,
-    pub size: f32,
-    pub weight: f32,
+    pub size: Unit,
+    pub weight: Unit,
     pub italic: bool,
     pub hint: bool,
     pub theme: Option<Theme>,
@@ -55,7 +55,7 @@ impl<'a> RasterScope<'a> {
                 .context
                 .builder(style.font)
                 .size(style.size.into())
-                .variations(&[("wght", style.weight), ("ital", style.italic.into())])
+                .variations(&[("wght", style.weight.into()), ("ital", style.italic.into())])
                 .hint(style.hint)
                 .build(),
             buffer: &mut rcx.buffer,
@@ -67,9 +67,12 @@ impl<'a> RasterScope<'a> {
         glyph: u16,
         x_fract: f32,
         y_fract: f32,
-    ) -> Result<Image, RasterizationError> {
-        debug_assert_eq!(x_fract.fract(), x_fract);
-        debug_assert_eq!(y_fract.fract(), y_fract);
+    ) -> Result<Image<'_>, RasterizationError> {
+        {
+            #![expect(clippy::float_cmp, reason = ".fract() always returns exact result")]
+            debug_assert_eq!(x_fract.fract(), x_fract);
+            debug_assert_eq!(y_fract.fract(), y_fract);
+        }
 
         let sources_base: [Source; 4] = [
             Source::ColorOutline(self.palette.unwrap_or(0)),
@@ -85,7 +88,7 @@ impl<'a> RasterScope<'a> {
 
         if !Render::new(sources)
             .offset(Vector::new(x_fract, y_fract))
-            .render_into(&mut self.scaler, glyph, &mut self.buffer)
+            .render_into(&mut self.scaler, glyph, self.buffer)
         {
             return Err(RasterizationError);
         }
@@ -94,7 +97,7 @@ impl<'a> RasterScope<'a> {
     }
 }
 
-fn query_palette<'a>(font: &'a FontRef, theme: Option<Theme>) -> Option<u16> {
+fn query_palette(font: &FontRef, theme: Option<Theme>) -> Option<u16> {
     let font: &swash::FontRef = font.as_ref();
 
     let mut best = None;
