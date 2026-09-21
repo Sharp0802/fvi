@@ -30,11 +30,11 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    pub fn new(colored: bool) -> Self {
+    pub const fn new(colored: bool) -> Self {
         Self::with_size(PAGE_SIZE, colored)
     }
 
-    fn with_size(size: u32, colored: bool) -> Self {
+    const fn with_size(size: u32, colored: bool) -> Self {
         Self {
             size,
             colored,
@@ -85,6 +85,7 @@ impl Atlas {
         }
     }
 
+    #[expect(clippy::needless_pass_by_value, reason = "intended lifetime")]
     pub fn remove(&mut self, view: AtlasView) {
         self.pages[view.page].remove(view.id);
     }

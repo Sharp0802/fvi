@@ -16,8 +16,7 @@ impl<'a> Image<'a> {
         Self {
             colored: match value.content {
                 Content::Mask => false,
-                Content::SubpixelMask => true,
-                Content::Color => true,
+                Content::SubpixelMask | Content::Color => true,
             },
             width: value.placement.width,
             height: value.placement.height,
