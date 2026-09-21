@@ -13,6 +13,7 @@ const PAGE_SIZE: u32 = 2048;
 pub struct AtlasView {
     page: usize,
     id: AllocId,
+    size: [u32; 2],
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -45,6 +46,11 @@ impl Atlas {
     pub fn read(&self, view: &AtlasView) -> AtlasPart {
         let rect = self.pages[view.page].alloc.get(view.id);
 
+        let size = rect.size().to_u32().to_array();
+
+        debug_assert!(size[0] >= view.size[0]);
+        debug_assert!(size[1] >= view.size[1]);
+
         AtlasPart {
             tex: self.pages[view.page]
                 .tex
@@ -53,7 +59,7 @@ impl Atlas {
                     ..Default::default()
                 }),
             pos: rect.min.to_u32().to_array(),
-            size: rect.size().to_u32().to_array(),
+            size: view.size,
         }
     }
 
@@ -65,6 +71,7 @@ impl Atlas {
                 return AtlasView {
                     page: i,
                     id: alloc.id,
+                    size: [image.width, image.height],
                 };
             }
         }
@@ -84,6 +91,7 @@ impl Atlas {
         AtlasView {
             page: page_id,
             id: alloc.id,
+            size: [image.width, image.height],
         }
     }
 
