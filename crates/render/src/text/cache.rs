@@ -4,13 +4,18 @@ use crate::text::*;
 use crate::{Cache, Theme};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GlyphReq {
+    pub glyph: u16,
+    pub x_fract: Unit,
+    pub y_fract: Unit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphStyle {
     pub size: Unit,
     pub weight: Unit,
     pub italic: bool,
     pub hint: bool,
-    pub x_fract: Unit,
-    pub y_fract: Unit,
     pub theme: Option<Theme>,
 }
 
@@ -52,10 +57,10 @@ impl GlyphCache {
         font_map: &FontMap,
         font_id: FontId,
         style: GlyphStyle,
-        gids: impl Iterator<Item = u16>,
+        reqs: impl Iterator<Item = GlyphReq>,
     ) -> Result<Vec<AtlasPart>, RasterizationError> {
         let mut buf = Vec::new();
-        self.fetch_batch_into(device, queue, font_map, font_id, style, &mut buf, gids)?;
+        self.fetch_batch_into(device, queue, font_map, font_id, style, &mut buf, reqs)?;
         Ok(buf)
     }
 
@@ -67,10 +72,10 @@ impl GlyphCache {
         font_id: FontId,
         style: GlyphStyle,
         buf: &mut Vec<AtlasPart>,
-        gids: impl Iterator<Item = u16>,
+        reqs: impl Iterator<Item = GlyphReq>,
     ) -> Result<(), RasterizationError> {
         font_map.with(font_id, |font| {
-            self.fetch_batch_into_unchecked(device, queue, font, font_id, style, buf, gids)
+            self.fetch_batch_into_unchecked(device, queue, font, font_id, style, buf, reqs)
         })
     }
 
@@ -82,9 +87,9 @@ impl GlyphCache {
         font_id: FontId,
         style: GlyphStyle,
         buf: &mut Vec<AtlasPart>,
-        gids: impl Iterator<Item = u16>,
+        reqs: impl Iterator<Item = GlyphReq>,
     ) -> Result<(), RasterizationError> {
-        buf.reserve(gids.size_hint().0);
+        buf.reserve(reqs.size_hint().0);
 
         let mut scope = self.rcx.open(RasterStyle {
             font: font.clone(),
@@ -95,15 +100,15 @@ impl GlyphCache {
             theme: style.theme,
         });
 
-        for gid in gids {
+        for req in reqs {
             let data = self.cache.try_fetch(
                 GlyphKey {
                     font: font_id,
-                    glyph: gid,
+                    glyph: req.glyph,
                     style,
                 },
                 |key| {
-                    let image = scope.rasterize(key.glyph, key.style.x_fract, key.style.y_fract)?;
+                    let image = scope.rasterize(key.glyph, req.x_fract, req.y_fract)?;
 
                     if image.is_empty() {
                         return Ok(None);
