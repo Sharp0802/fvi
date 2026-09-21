@@ -5,8 +5,7 @@ use swash::zeno::Vector;
 
 use super::SwashImage;
 use crate::Theme;
-use crate::text::FontRef;
-use crate::text::image::Image;
+use crate::text::{FontRef, Image, RasterizationError};
 
 #[derive(Clone, Debug)]
 pub struct RasterStyle<'a> {
@@ -63,7 +62,12 @@ impl<'a> RasterScope<'a> {
         }
     }
 
-    pub fn rasterize(&mut self, glyph: u16, x_fract: f32, y_fract: f32) -> Option<Image> {
+    pub fn rasterize(
+        &mut self,
+        glyph: u16,
+        x_fract: f32,
+        y_fract: f32,
+    ) -> Result<Image, RasterizationError> {
         debug_assert_eq!(x_fract.fract(), x_fract);
         debug_assert_eq!(y_fract.fract(), y_fract);
 
@@ -83,10 +87,10 @@ impl<'a> RasterScope<'a> {
             .offset(Vector::new(x_fract, y_fract))
             .render_into(&mut self.scaler, glyph, &mut self.buffer)
         {
-            return None;
+            return Err(RasterizationError);
         }
 
-        Some(Image::from(self.buffer))
+        Ok(Image::from(self.buffer))
     }
 }
 

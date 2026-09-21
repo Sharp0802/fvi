@@ -3,6 +3,9 @@ use std::fmt::Display;
 
 use crate::context::InsertionError;
 
+#[derive(Debug)]
+pub struct RasterizationError;
+
 /// An error from atlas.
 #[derive(Debug)]
 pub enum AtlasError {
