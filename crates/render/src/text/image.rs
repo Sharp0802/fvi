@@ -24,6 +24,11 @@ impl<'a> Image<'a> {
         }
     }
 
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.width == 0 || self.height == 0 || self.data.is_empty()
+    }
+
     pub fn write_to(&self, queue: &Queue, dst: &Texture, origin: Origin3d) {
         debug_assert_eq!((self.width * self.height) as usize, self.data.len());
         debug_assert_eq!(
@@ -35,6 +40,10 @@ impl<'a> Image<'a> {
             dst.format()
         );
 
+        if self.is_empty() {
+            return;
+        }
+
         queue.write_texture(
             TexelCopyTextureInfo {
                 texture: dst,
@@ -42,7 +51,7 @@ impl<'a> Image<'a> {
                 origin,
                 aspect: TextureAspect::All,
             },
-            &self.data,
+            self.data,
             TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(self.width),

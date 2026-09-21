@@ -58,6 +58,8 @@ impl Atlas {
     }
 
     pub fn store(&mut self, device: &Device, queue: &Queue, image: &Image) -> AtlasView {
+        assert!(!image.is_empty(), "cannot store empty image in atlas");
+
         for (i, page) in self.pages.iter_mut().enumerate() {
             if let Some(alloc) = page.store(queue, image) {
                 return AtlasView {
