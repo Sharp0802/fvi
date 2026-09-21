@@ -40,12 +40,14 @@ impl GlyphContext {
     }
 }
 
+/// A text element.
 #[derive(Clone, Debug)]
 pub struct Text {
     string: String,
 }
 
 impl Text {
+    /// Creates a new [`Text`].
     #[must_use]
     pub fn new() -> Self {
         Self {
