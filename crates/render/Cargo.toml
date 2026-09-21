@@ -10,6 +10,7 @@ fvi-core.workspace = true
 
 bytemuck.workspace = true
 etagere.workspace = true
+fontdb.workspace = true
 hashbrown.workspace = true
 harfrust.workspace = true
 nalgebra.workspace = true
