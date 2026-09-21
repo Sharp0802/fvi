@@ -65,14 +65,11 @@ impl<'a> RasterScope<'a> {
     pub fn rasterize(
         &mut self,
         glyph: u16,
-        x_fract: f32,
-        y_fract: f32,
+        x_fract: Unit,
+        y_fract: Unit,
     ) -> Result<Image<'_>, RasterizationError> {
-        {
-            #![expect(clippy::float_cmp, reason = ".fract() always returns exact result")]
-            debug_assert_eq!(x_fract.fract(), x_fract);
-            debug_assert_eq!(y_fract.fract(), y_fract);
-        }
+        debug_assert_eq!(x_fract.fract(), x_fract);
+        debug_assert_eq!(y_fract.fract(), y_fract);
 
         let sources_base: [Source; 4] = [
             Source::ColorOutline(self.palette.unwrap_or(0)),
@@ -89,7 +86,7 @@ impl<'a> RasterScope<'a> {
         self.buffer.clear();
 
         if !Render::new(sources)
-            .offset(Vector::new(x_fract, y_fract))
+            .offset(Vector::new(x_fract.into(), y_fract.into()))
             .render_into(&mut self.scaler, glyph, self.buffer)
         {
             return Err(RasterizationError);
