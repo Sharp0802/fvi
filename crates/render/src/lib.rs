@@ -10,6 +10,7 @@ mod frame;
 mod id;
 mod raw;
 pub mod text;
+mod theme;
 mod unit;
 
 pub(crate) use cache::*;
@@ -17,6 +18,7 @@ pub use canvas::*;
 pub use error::*;
 pub use frame::*;
 pub use id::*;
+pub use theme::*;
 pub use unit::*;
 
 #[path = "gfx.g.rs"]
