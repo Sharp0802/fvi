@@ -88,9 +88,8 @@ impl GlyphCache {
 
         let mut scope = self.rcx.open(RasterStyle {
             font: font.clone(),
-            // use normalized values
-            size: style.size.into(),
-            weight: style.weight.into(),
+            size: style.size,
+            weight: style.weight,
             italic: style.italic,
             hint: style.hint,
             theme: style.theme,
@@ -104,11 +103,7 @@ impl GlyphCache {
                     style,
                 },
                 |key| {
-                    let image = scope.rasterize(
-                        key.glyph,
-                        key.style.x_fract.into(),
-                        key.style.y_fract.into(),
-                    )?;
+                    let image = scope.rasterize(key.glyph, key.style.x_fract, key.style.y_fract)?;
 
                     if image.is_empty() {
                         return Ok(None);

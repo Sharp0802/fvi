@@ -5,6 +5,10 @@ impl Unit {
     // 4 unit per 1 physical pixel
     const PRECI: i32 = 4;
     const PRECF: f32 = 4.0;
+
+    pub const fn fract(self) -> Self {
+        Self(self.0 - (self.0 % Self::PRECI))
+    }
 }
 
 impl From<f32> for Unit {
