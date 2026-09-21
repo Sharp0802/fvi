@@ -15,6 +15,13 @@ pub struct AtlasView {
     id: AllocId,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct AtlasPart {
+    pub tex: TextureView,
+    pub pos: [u32; 2],
+    pub size: [u32; 2],
+}
+
 #[derive(Debug)]
 pub struct Atlas {
     size: u32,
@@ -32,6 +39,21 @@ impl Atlas {
             size,
             colored,
             pages: Vec::new(),
+        }
+    }
+
+    pub fn read(&self, view: &AtlasView) -> AtlasPart {
+        let rect = self.pages[view.page].alloc.get(view.id);
+
+        AtlasPart {
+            tex: self.pages[view.page]
+                .tex
+                .create_view(&TextureViewDescriptor {
+                    usage: Some(TextureUsages::TEXTURE_BINDING),
+                    ..Default::default()
+                }),
+            pos: rect.min.to_u32().to_array(),
+            size: rect.size().to_u32().to_array(),
         }
     }
 
