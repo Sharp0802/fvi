@@ -7,7 +7,6 @@ use wgpu::util::*;
 use wgpu::*;
 
 use crate::label;
-use crate::text::AtlasId;
 
 /// A key for internal textures.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,19 +22,11 @@ impl InternalTextureId {
 pub enum TextureId {
     /// An internal texture.
     Internal(InternalTextureId),
-    /// An atlas texture.
-    Atlas(AtlasId),
 }
 
 impl From<InternalTextureId> for TextureId {
     fn from(value: InternalTextureId) -> Self {
         Self::Internal(value)
-    }
-}
-
-impl From<AtlasId> for TextureId {
-    fn from(value: AtlasId) -> Self {
-        Self::Atlas(value)
     }
 }
 

@@ -19,3 +19,22 @@ pub use style::*;
 use unit::*;
 
 use swash::scale::image::Image as SwashImage;
+
+#[derive(Debug)]
+pub(crate) struct GlyphContext {
+    cache: GlyphCache,
+    fonts: FontMap,
+}
+
+impl GlyphContext {
+    pub fn new() -> Self {
+        Self {
+            cache: GlyphCache::new(),
+            fonts: FontMap::new(),
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.cache.update();
+    }
+}
