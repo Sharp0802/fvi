@@ -22,7 +22,7 @@ pub struct GlyphStyle {
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct GlyphKey {
     font: FontId,
-    glyph: u16,
+    req: GlyphReq,
     style: GlyphStyle,
 }
 
@@ -104,11 +104,11 @@ impl GlyphCache {
             let data = self.cache.try_fetch(
                 GlyphKey {
                     font: font_id,
-                    glyph: req.glyph,
+                    req,
                     style,
                 },
                 |key| {
-                    let image = scope.rasterize(key.glyph, req.x_fract, req.y_fract)?;
+                    let image = scope.rasterize(key.req.glyph, key.req.x_fract, key.req.y_fract)?;
 
                     if image.is_empty() {
                         return Ok(None);
