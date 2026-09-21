@@ -1,13 +1,20 @@
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::sync::Arc;
 use swash::text::cluster::{CharCluster, Status};
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "it's crate-scoped although parent is pub"
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FontId(fontdb::ID);
+pub(crate) struct FontId(fontdb::ID);
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "it's crate-scoped although parent is pub"
+)]
 #[derive(Clone)]
-pub struct FontRef<'a> {
+pub(crate) struct FontRef<'a> {
     harfrust: harfrust::FontRef<'a>,
     swash: swash::FontRef<'a>,
 }
@@ -54,15 +61,16 @@ impl<'a> From<FontRef<'a>> for swash::FontRef<'a> {
     }
 }
 
+/// A set of fonts.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Fonts {
     fonts: Arc<[fontdb::ID]>,
 }
 
 impl Fonts {
-    pub fn resolve(&self, map: &FontMap, cluster: &mut CharCluster) -> Option<FontId> {
+    pub(crate) fn resolve(&self, map: &FontMap, cluster: &mut CharCluster) -> Option<FontId> {
         let mut best = None;
-        for &font in self.fonts.deref() {
+        for &font in &*self.fonts {
             match map
                 .db
                 .with_face_data(font, |data, index| {
@@ -85,15 +93,21 @@ impl Fonts {
     }
 }
 
+/// A style of the font.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FontStyle {
+    /// Font weight.
     pub weight: u16,
+    /// Whether to set italic.
     pub italic: bool,
 }
 
+/// A descriptor of [`Fonts`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FontsDescriptor<'a> {
+    /// Names of fonts.
     pub names: &'a [&'a str],
+    /// Font style.
     pub style: FontStyle,
 }
 
@@ -133,23 +147,26 @@ impl Fonts {
     }
 }
 
+/// A map of available fonts.
 #[derive(Debug)]
 pub struct FontMap {
     db: fontdb::Database,
 }
 
 impl FontMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             db: fontdb::Database::new(),
         }
     }
 
+    /// Resolves a [`FontsDescriptor`] to [`Fonts`].
+    #[must_use]
     pub fn resolve(&self, desc: &FontsDescriptor) -> Fonts {
         Fonts::new(self, desc)
     }
 
-    pub fn with<T, F>(&self, id: FontId, f: F) -> T
+    pub(crate) fn with<T, F>(&self, id: FontId, f: F) -> T
     where
         F: FnOnce(&FontRef) -> T,
     {

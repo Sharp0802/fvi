@@ -1,12 +1,18 @@
 use crate::text::Fonts;
 use crate::{Color, Sp};
 
+/// A style of text.
 #[derive(Clone, Debug)]
 pub struct Style {
+    /// A set of fonts.
     pub fonts: Fonts,
+    /// An overlay color.
     pub color: Color,
+    /// Font weight.
     pub weight: u16,
+    /// Whether to set italic.
     pub italic: bool,
+    /// Font size.
     pub size: Sp,
 }
 

@@ -3,8 +3,15 @@ use std::fmt::Display;
 
 use crate::context::InsertionError;
 
+/// An error during rasterization.
 #[derive(Debug)]
 pub struct RasterizationError;
+
+impl Display for RasterizationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("failed to rasterize glyph")
+    }
+}
 
 /// An error from atlas.
 #[derive(Debug)]
