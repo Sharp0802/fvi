@@ -68,7 +68,9 @@ impl<K: Eq + Hash, V> Cache<K, V> {
     }
 
     pub fn clear(&mut self) {
-        self.segments.clear();
+        for segment in &mut self.segments {
+            segment.items.clear();
+        }
         self.table.clear();
     }
 
