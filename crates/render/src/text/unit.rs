@@ -9,14 +9,22 @@ impl Unit {
 
 impl From<f32> for Unit {
     fn from(value: f32) -> Self {
-        Self((value * Unit::PRECF).round() as i32)
+        #[expect(clippy::cast_possible_truncation, reason = "created from i32")]
+        Self((value * Self::PRECF).round() as i32)
     }
 }
 
 impl From<Unit> for f32 {
     fn from(value: Unit) -> Self {
-        let fract = (value.0 % Unit::PRECI) as f32;
-        let int = (value.0 / Unit::PRECI) as f32;
+        #![expect(
+            clippy::cast_precision_loss,
+            reason = r"
+            precision loss is acceptable for glyph cache keys;
+            if a property goes larger than 2^23, difference will not be seen by user
+            "
+        )]
+        let fract = (value.0 % Unit::PRECI) as Self;
+        let int = (value.0 / Unit::PRECI) as Self;
         fract / Unit::PRECF + int
     }
 }
