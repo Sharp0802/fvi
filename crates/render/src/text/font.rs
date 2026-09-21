@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
+use swash::text::cluster::{CharCluster, Status};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FontId(fontdb::ID);
@@ -59,25 +60,28 @@ pub struct Fonts {
 }
 
 impl Fonts {
-    pub fn resolve(&self, map: &FontMap, text: &str) -> Option<FontId> {
+    pub fn resolve(&self, map: &FontMap, cluster: &mut CharCluster) -> Option<FontId> {
+        let mut best = None;
         for &font in self.fonts.deref() {
-            if map
+            match map
                 .db
                 .with_face_data(font, |data, index| {
                     let Some(font) = swash::FontRef::from_index(data, index as usize) else {
-                        return false;
+                        return Status::Discard;
                     };
 
                     let charmap = font.charmap();
-                    text.chars().all(|ch| charmap.map(ch) != 0)
+                    cluster.map(|ch| charmap.map(ch))
                 })
-                .unwrap_or(false)
+                .unwrap_or(Status::Discard)
             {
-                return Some(FontId(font));
+                Status::Complete => return Some(FontId(font)),
+                Status::Keep => best = Some(FontId(font)),
+                Status::Discard => {}
             }
         }
 
-        None
+        best
     }
 }
 
