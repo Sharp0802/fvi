@@ -157,3 +157,44 @@ impl Sp {
         Dp(dp.copysign(self.0))
     }
 }
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Zeroable, Pod)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub fn to_bits(&self) -> u128 {
+        let r = (self.r.to_bits() as u128) << 96;
+        let g = (self.g.to_bits() as u128) << 64;
+        let b = (self.b.to_bits() as u128) << 32;
+        let a = (self.a.to_bits() as u128) << 0;
+        r | g | b | a
+    }
+}
+
+impl From<wgpu::Color> for Color {
+    fn from(value: wgpu::Color) -> Self {
+        Self {
+            r: value.r as f32,
+            g: value.g as f32,
+            b: value.b as f32,
+            a: value.a as f32,
+        }
+    }
+}
+
+impl From<Color> for wgpu::Color {
+    fn from(value: Color) -> Self {
+        Self {
+            r: value.r as f64,
+            g: value.g as f64,
+            b: value.b as f64,
+            a: value.a as f64,
+        }
+    }
+}
