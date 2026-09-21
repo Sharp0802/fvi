@@ -1,4 +1,4 @@
-use hashbrown::hash_table::OccupiedEntry;
+use hashbrown::hash_table::{Entry, OccupiedEntry};
 use hashbrown::{DefaultHashBuilder, HashTable};
 use std::hash::{BuildHasher, Hash};
 
@@ -70,6 +70,50 @@ impl<K: Eq + Hash, V> Cache<K, V> {
     pub fn clear(&mut self) {
         self.segments.clear();
         self.table.clear();
+    }
+
+    fn try_fetch_entry<E>(
+        &mut self,
+        key: K,
+        default: impl FnOnce(&K) -> Result<V, E>,
+    ) -> Result<TableEntry, E> {
+        let hash = self.hasher.hash_one(&key);
+
+        let entry = self.table.entry(
+            hash,
+            |&other| {
+                let segment = &self.segments[other.loc.segment as usize];
+                segment.items[other.loc.item as usize].key == key
+            },
+            |old| old.hash,
+        );
+
+        let &entry = match entry {
+            Entry::Occupied(entry) => entry,
+            Entry::Vacant(vacant) => {
+                let value = default(&key)?;
+
+                let index = self.segments[0].items.len();
+                self.segments[0].items.push(Item {
+                    epoch: self.now,
+                    key,
+                    value,
+                });
+
+                vacant.insert(TableEntry {
+                    loc: ItemLoc {
+                        segment: 0,
+                        item: index.try_into().expect("insufficient address range"),
+                    },
+                    hash,
+                })
+            }
+        }
+        .get();
+
+        self.segments[entry.loc.segment as usize].items[entry.loc.item as usize].epoch = self.now;
+
+        Ok(entry)
     }
 
     fn fetch_entry(&mut self, key: K, default: impl FnOnce(&K) -> V) -> TableEntry {
@@ -146,6 +190,15 @@ impl<K: Eq + Hash, V> Cache<K, V> {
         let occupied = self.table.get_bucket_entry(removed_bucket).unwrap();
 
         (occupied, removed)
+    }
+
+    pub fn try_fetch<E>(
+        &mut self,
+        key: K,
+        default: impl FnOnce(&K) -> Result<V, E>,
+    ) -> Result<&V, E> {
+        let entry = self.try_fetch_entry(key, default)?;
+        Ok(&self.segments[entry.loc.segment as usize].items[entry.loc.item as usize].value)
     }
 
     pub fn fetch(&mut self, key: K, default: impl FnOnce(&K) -> V) -> &V {
