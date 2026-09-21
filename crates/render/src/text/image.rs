@@ -29,8 +29,15 @@ impl<'a> Image<'a> {
         self.width == 0 || self.height == 0 || self.data.is_empty()
     }
 
+    const fn px_size(&self) -> u32 {
+        if self.colored { 4 } else { 1 }
+    }
+
     pub fn write_to(&self, queue: &Queue, dst: &Texture, origin: Origin3d) {
-        debug_assert_eq!((self.width * self.height) as usize, self.data.len());
+        debug_assert_eq!(
+            (self.width * self.height * self.px_size()) as usize,
+            self.data.len()
+        );
         debug_assert_eq!(
             if self.colored {
                 TextureFormat::Rgba8Unorm
@@ -54,7 +61,7 @@ impl<'a> Image<'a> {
             self.data,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(self.width * if self.colored { 4 } else { 1 }),
+                bytes_per_row: Some(self.width * self.px_size()),
                 rows_per_image: Some(self.height),
             },
             Extent3d {
