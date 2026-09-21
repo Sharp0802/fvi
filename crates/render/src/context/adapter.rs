@@ -8,11 +8,12 @@ fn is_compatible(adapter: &Adapter, surface: &Surface, config: &RenderConfig) ->
     let mut is_compat = true;
 
     let limits = adapter.limits();
-    let limits_mask = config.limits.clone().or_better_values_from(&limits);
-    limits.check_limits_with_fail_fn(&limits_mask, false, |limit_name, actual, req| {
-        is_compat = false;
-        trace!("{name}: {limit_name}={actual}, {req} required");
-    });
+    config
+        .limits
+        .check_limits_with_fail_fn(&limits, false, |limit_name, req, actual| {
+            is_compat = false;
+            trace!("{name}: {limit_name}={actual}, {req} required");
+        });
 
     let feat_diff = config.features.difference(adapter.features());
     if !feat_diff.is_empty() {
