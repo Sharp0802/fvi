@@ -9,14 +9,8 @@ license.workspace = true
 fvi-core.workspace = true
 fvi-render.workspace = true
 
-bytemuck.workspace = true
-tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 winit.workspace = true
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true
