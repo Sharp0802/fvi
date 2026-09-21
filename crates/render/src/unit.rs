@@ -158,26 +158,34 @@ impl Sp {
     }
 }
 
+/// A straight RGBA32 color.
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Zeroable, Pod)]
 pub struct Color {
+    /// Red channel of the color.
     pub r: f32,
+    /// Green channel of the color.
     pub g: f32,
+    /// Blue channel of the color.
     pub b: f32,
+    /// Alpha channel of the color.
     pub a: f32,
 }
 
 impl Color {
+    /// Raw transmutation to `u128`.
+    #[must_use]
     pub fn to_bits(&self) -> u128 {
-        let r = (self.r.to_bits() as u128) << 96;
-        let g = (self.g.to_bits() as u128) << 64;
-        let b = (self.b.to_bits() as u128) << 32;
-        let a = (self.a.to_bits() as u128) << 0;
+        let r = u128::from(self.r.to_bits()) << 96;
+        let g = u128::from(self.g.to_bits()) << 64;
+        let b = u128::from(self.b.to_bits()) << 32;
+        let a = u128::from(self.a.to_bits());
         r | g | b | a
     }
 }
 
 impl From<wgpu::Color> for Color {
+    #[expect(clippy::cast_possible_truncation, reason = "intended loss")]
     fn from(value: wgpu::Color) -> Self {
         Self {
             r: value.r as f32,
@@ -191,10 +199,10 @@ impl From<wgpu::Color> for Color {
 impl From<Color> for wgpu::Color {
     fn from(value: Color) -> Self {
         Self {
-            r: value.r as f64,
-            g: value.g as f64,
-            b: value.b as f64,
-            a: value.a as f64,
+            r: value.r.into(),
+            g: value.g.into(),
+            b: value.b.into(),
+            a: value.a.into(),
         }
     }
 }
