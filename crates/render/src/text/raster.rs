@@ -86,6 +86,8 @@ impl<'a> RasterScope<'a> {
             &sources_base[1..]
         };
 
+        self.buffer.clear();
+
         if !Render::new(sources)
             .offset(Vector::new(x_fract, y_fract))
             .render_into(&mut self.scaler, glyph, self.buffer)
