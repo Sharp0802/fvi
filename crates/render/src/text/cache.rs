@@ -4,7 +4,7 @@ use crate::text::*;
 use crate::{Cache, Theme};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct GlyphStyle {
+pub struct GlyphStyle {
     pub size: Unit,
     pub weight: Unit,
     pub italic: bool,
